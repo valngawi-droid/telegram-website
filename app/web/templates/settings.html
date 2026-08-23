@@ -49,6 +49,22 @@
   <input id="s-AI_KEY" type="password" placeholder="AQ.... / sk-... / gsk_..." />
 </div>
 
+<div class="card tool-card">
+  <h3>👥 Izin Create & Chat Owner</h3>
+  <p class="muted">Create channel/grup khusus <b>owner & pacar</b> (3 ID preset)
+  + member yang di-whitelist (tab <b>Member</b>). Limit di bawah = default per member.</p>
+  <div class="row-2">
+    <div>
+      <label>Limit Create Default (per member)</label>
+      <input id="s-CREATE_LIMIT" type="number" min="0" value="{{ values.CREATE_LIMIT or 10 }}" />
+    </div>
+    <div>
+      <label>ID Tujuan "Chat dengan Owner"</label>
+      <input id="s-OWNER_CHAT_ID" type="text" value="{{ values.OWNER_CHAT_ID or '' }}" placeholder="8861238621" />
+    </div>
+  </div>
+</div>
+
 <div class="btn-row">
   <button class="btn btn-primary btn-lg" onclick="saveSettings()">💾 Simpan Pengaturan</button>
   <button class="btn btn-outline btn-lg" onclick="testAi()">🧪 Tes Koneksi AI</button>
@@ -68,7 +84,8 @@
 {% block scripts %}
 <script>
 const FIELDS = ['BOT_TOKEN','API_ID','API_HASH','BOT_USERNAME','ADMIN_PASSWORD',
-  'AI_PROVIDER','AI_PROJECT','AI_MODEL','AI_OPENAI_MODEL','AI_BASE_URL','AI_KEY'];
+  'AI_PROVIDER','AI_PROJECT','AI_MODEL','AI_OPENAI_MODEL','AI_BASE_URL','AI_KEY',
+  'CREATE_LIMIT','OWNER_CHAT_ID'];
 
 async function saveSettings() {
   const box = document.getElementById('set-result');

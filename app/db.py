@@ -64,6 +64,13 @@ CREATE TABLE IF NOT EXISTS welcome (
     text TEXT NOT NULL,
     updated REAL
 );
+CREATE TABLE IF NOT EXISTS creators (
+    tg_id INTEGER PRIMARY KEY,
+    label TEXT,
+    max_create INTEGER,   -- NULL/0 = pakai default global CREATE_LIMIT
+    used INTEGER DEFAULT 0,
+    created_at REAL
+);
 CREATE INDEX IF NOT EXISTS idx_ai_user ON ai_messages(user_key, id);
 """
 
@@ -220,6 +227,37 @@ class DB:
 
     async def del_welcome(self, chat_id: int):
         await self.execute("DELETE FROM welcome WHERE chat_id=?", (int(chat_id),))
+
+    # ------------------------- creator members ------------------------------
+    async def add_creator(self, tg_id: int, label: str, limit: int | None):
+        await self.execute(
+            "INSERT OR REPLACE INTO creators(tg_id, label, max_create, used, created_at) "
+            "VALUES(?,?,?, COALESCE((SELECT used FROM creators WHERE tg_id=?), 0), ?)",
+            (int(tg_id), label, limit, int(tg_id), time.time()),
+        )
+
+    async def get_creators(self) -> list[dict]:
+        return await self.query(
+            "SELECT * FROM creators ORDER BY created_at DESC"
+        )
+
+    async def get_creator(self, tg_id: int) -> dict | None:
+        return await self.query_one(
+            "SELECT * FROM creators WHERE tg_id=?", (int(tg_id),)
+        )
+
+    async def set_creator_limit(self, tg_id: int, limit: int | None):
+        await self.execute(
+            "UPDATE creators SET max_create=? WHERE tg_id=?", (limit, int(tg_id))
+        )
+
+    async def remove_creator(self, tg_id: int):
+        await self.execute("DELETE FROM creators WHERE tg_id=?", (int(tg_id),))
+
+    async def bump_creator_used(self, tg_id: int):
+        await self.execute(
+            "UPDATE creators SET used = used + 1 WHERE tg_id=?", (int(tg_id),)
+        )
 
 
 db = DB()

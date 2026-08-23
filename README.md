@@ -69,6 +69,27 @@ Bot Telegram (aiogram 3)      Website (FastAPI + Jinja2)
 > **admin penuh dengan rank "Owner"** (semua hak: manage channel, tambah admin,
 > post, dll). Ini sudah penuh kendali di channel tersebut.
 
+## 🔐 Sistem Izin Create (Role + Limit)
+
+Create channel/grup **khusus**:
+- 👑 **Owner & pacar** — 3 ID preset (`8861238621` Pall utama, `8719750003` Pall 2,
+  `8897520559` pacar) → **unlimited** + bisa kelola semuanya
+- 👥 **Member whitelist** — ditambahkan owner (via bot menu ⚙️ Admin →
+  *Tambah Member*, atau website tab **Member**), boleh create **sampai limit**
+  (per member, atau default global `CREATE_LIMIT` = 10, bisa diubah)
+- 🚫 **User biasa** — **tidak bisa create** (dapat pesan "khusus owner &
+  member yang diizinkan")
+
+Counter pemakaian naik otomatis tiap member berhasil create. Owner bisa
+ubah limit member kapan saja atau cabut izin (hapus member).
+
+## 💬 Chat dengan Owner
+
+Menu **💬 Chat dengan Owner** (semua user): pesan diteruskan langsung ke
+Telegram owner (ID `OWNER_CHAT_ID`, default `8861238621`) lengkap dengan
+nama/username/ID pengirim. Owner tinggal **reply pesan terusan** itu, dan
+balasan otomatis diteruskan balik ke user-nya.
+
 ##  Struktur
 
 ```
@@ -156,10 +177,13 @@ Kirim `/start` ke bot → muncul **menu tombol**:
    (tombol: Pall utama / Pall akun 2 / Pacar / input ID manual)
    → bot membuat + menunjuk owner → dapat link/ID.
 4. **📢 Tambah Bot** → kirim invite link channel/grup, bot langsung join.
+5. **💬 Chat dengan Owner** → chat langsung ke Pall (diteruskan ke Telegram
+   owner; owner reply → balasan balik ke kamu).
 5. **ℹ️ Info** → tentang bot.
-6. **⚙️ Admin** (hanya 3 owner) → statistik, tes AI, **edit channel**
+7. **⚙️ Admin** (hanya 3 owner) → statistik, tes AI, **edit channel**
    (ubah nama/deskripsi, invite baru, detail member, hapus channel),
-   tambah/list owner, daftar channel, broadcast.
+   tambah/list owner, **tambah member + atur limit create**,
+   daftar channel, broadcast.
 
 **Moderasi grup** (bot harus admin grup — reply pesan member atau `@username`):
 `/kick` (keluarkan sementara) • `/ban` (permanen) • `/unban` • `/mute` (1 jam) • `/unmute`

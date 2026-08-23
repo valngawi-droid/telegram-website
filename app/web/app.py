@@ -263,6 +263,19 @@ async def page_settings(request: Request):
     return _page(request, "settings.html", values=safe)
 
 
+@app.get("/admin/member", response_class=HTMLResponse)
+async def page_member(request: Request):
+    if not await _require_admin(request):
+        return RedirectResponse("/admin/login", status_code=302)
+    cfg = await _cfg()
+    try:
+        glimit = int(cfg.get("CREATE_LIMIT", "10"))
+    except (ValueError, TypeError):
+        glimit = 10
+    return _page(request, "member.html",
+                 creators=await db.get_creators(), global_limit=glimit)
+
+
 @app.get("/admin/cekeluar", include_in_schema=False)
 async def page_logout(request: Request):
     resp = RedirectResponse("/", status_code=302)
@@ -600,4 +613,56 @@ async def api_add_owner(data: dict, request: Request):
 async def api_remove_owner(tg_id: int, request: Request):
     await _admin_guard(request)
     await db.remove_owner(tg_id)
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Member (whitelist boleh create, dengan limit)
+# ---------------------------------------------------------------------------
+@app.get("/api/creators")
+async def api_creators(request: Request):
+    await _admin_guard(request)
+    cfg = await _cfg()
+    try:
+        glimit = int(cfg.get("CREATE_LIMIT", "10"))
+    except (ValueError, TypeError):
+        glimit = 10
+    return {"ok": True, "creators": await db.get_creators(), "global_limit": glimit}
+
+
+@app.post("/api/creators")
+async def api_add_creator(data: dict, request: Request):
+    await _admin_guard(request)
+    tg_id = int(data.get("tg_id", 0))
+    label = str(data.get("label", "Member")).strip()[:60]
+    limit = data.get("limit")
+    try:
+        limit = int(limit) if limit not in (None, "") else None
+    except (ValueError, TypeError):
+        limit = None
+    if not tg_id:
+        raise HTTPException(400, "tg_id wajib angka")
+    await db.add_creator(tg_id, label or "Member", limit)
+    return {"ok": True}
+
+
+@app.post("/api/creators/{tg_id}/limit")
+async def api_creator_limit(tg_id: int, data: dict, request: Request):
+    await _admin_guard(request)
+    limit = data.get("limit")
+    try:
+        limit = int(limit) if limit not in (None, "") else None
+    except (ValueError, TypeError):
+        limit = None
+    row = await db.get_creator(tg_id)
+    if not row:
+        raise HTTPException(404, "member tidak ditemukan")
+    await db.set_creator_limit(tg_id, limit)
+    return {"ok": True}
+
+
+@app.delete("/api/creators/{tg_id}")
+async def api_remove_creator(tg_id: int, request: Request):
+    await _admin_guard(request)
+    await db.remove_creator(tg_id)
     return {"ok": True}

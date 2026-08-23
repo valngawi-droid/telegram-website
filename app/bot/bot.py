@@ -78,6 +78,16 @@ class EditChannel(StatesGroup):
     wait_about = State()
 
 
+class OwnerChat(StatesGroup):
+    on = State()
+
+
+class AddMember(StatesGroup):
+    wait_id = State()
+    wait_label = State()
+    wait_limit = State()
+
+
 AI_RATE = 30          # pesan per jendela
 AI_WINDOW = 600       # detik
 _rate: dict[int, list[float]] = {}
@@ -125,6 +135,7 @@ def main_kb(admin: bool = False) -> InlineKeyboardMarkup:
         [B("🔍 Cek ID", "menu_cekid"), B("🤖 AI Chat", "menu_ai")],
         [B("➕ Buat Channel", "create_channel"), B("➕ Buat Grup", "create_group")],
         [B("📢 Tambah Bot", "menu_join"), B("ℹ️ Info", "menu_info")],
+        [B("💬 Chat dengan Owner", "menu_ownerchat")],
     ]
     if admin:
         rows.append([B("⚙️ Admin", "menu_admin")])
@@ -719,14 +730,109 @@ async def cb_ai_clear(cq: CallbackQuery, state: FSMContext):
 
 
 # ---------------------------------------------------------------------------
+# 💬 Chat dengan Owner (relay)
+# ---------------------------------------------------------------------------
+def owner_chat_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [B("⏹️ Tutup Chat Owner", "ownerchat_stop")],
+        [B("🏠 Menu Utama", "main")],
+    ])
+
+
+@router.callback_query(F.data == "menu_ownerchat")
+async def cb_menu_ownerchat(cq: CallbackQuery, state: FSMContext):
+    await state.set_state(OwnerChat.on)
+    await cq.message.edit_text(
+        "💬 <b>Chat dengan Owner</b>\n\n"
+        "Kirim pesanmu di bawah — akan diteruskan langsung ke "
+        "owner (Pall). Balasan owner akan diteruskan balik ke kamu.",
+        parse_mode=ParseMode.HTML,
+        reply_markup=owner_chat_kb(),
+    )
+    cq.answer()
+
+
+@router.callback_query(F.data == "ownerchat_stop")
+async def cb_ownerchat_stop(cq: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await cq.message.edit_text(
+        "⏹️ Chat owner ditutup.",
+        reply_markup=main_kb(await is_admin(cq.from_user.id)),
+    )
+    cq.answer()
+
+
+@router.message(OwnerChat.on, F.text)
+async def fsm_ownerchat_text(message: Message, state: FSMContext):
+    text = (message.text or "").strip()
+    if not text:
+        return
+    ok, msg = await services.send_to_owner(message.bot, message.from_user, text)
+    await message.answer(msg)
+
+
+async def _is_owner_dm(message: Message, state: FSMContext) -> bool:
+    """Pesan private dari owner (untuk routing balasan ke user).
+
+    Tidak aktif kalau owner sedang dalam FSM (mis. isi broadcast).
+    """
+    if await state.get_state() is not None:
+        return False
+    if message.chat.type != "private" or not message.from_user:
+        return False
+    cfg = await services.get_cfg()
+    try:
+        owner_id = int(cfg.get("OWNER_CHAT_ID", "8861238621"))
+    except (ValueError, TypeError):
+        return False
+    return message.from_user.id == owner_id
+
+
+@router.message(_is_owner_dm)
+async def owner_reply_route(message: Message):
+    """Owner reply ke pesan terusan -> teruskan balik ke user."""
+    text = (message.text or "").strip()
+    if not text or text.startswith("/"):
+        return  # biarkan command handler yang urus
+    # kasus 1: owner reply-to pesan terusan tertentu
+    rt = message.reply_to_message
+    if rt and rt.id in services.OWNER_RELAY:
+        user_id = services.OWNER_RELAY.pop(rt.id)
+        if await services.route_owner_reply(message.bot, text, user_id):
+            await message.answer(f"✅ Balasan diteruskan ke user <code>{user_id}</code>",
+                                 parse_mode=ParseMode.HTML)
+        return
+    # kasus 2: hanya 1 sesi aktif & owner kirim biasa
+    if len(services.OWNER_RELAY) == 1:
+        user_id = next(iter(services.OWNER_RELAY.values()))
+        if await services.route_owner_reply(message.bot, text, user_id):
+            await message.answer(f"✅ Balasan diteruskan ke user <code>{user_id}</code>",
+                                 parse_mode=ParseMode.HTML)
+
+
+# ---------------------------------------------------------------------------
 # Buat channel / grup
 # ---------------------------------------------------------------------------
 async def _start_create(cq: CallbackQuery, state: FSMContext, etype: str):
+    perm = await services.create_permission(cq.from_user.id)
+    if not perm["allowed"]:
+        await state.clear()
+        await cq.message.edit_text(
+            "🔒 <b>Fitur create dibatasi</b>\n\n" + perm["reason"] +
+            "\n\nTekan 💬 Chat dengan Owner untuk minta izin.",
+            parse_mode=ParseMode.HTML,
+            reply_markup=main_kb(await is_admin(cq.from_user.id)),
+        )
+        cq.answer()
+        return
+    note = ""
+    if perm["role"] == "member":
+        note = f"\n<i>(Member: {perm['reason'].lower()})</i>"
     await state.set_state(Create.wait_name)
     await state.update_data(etype=etype)
     label = "channel" if etype == "channel" else "grup"
     await cq.message.edit_text(
-        f"➕ <b>Buat {label}</b>\n\nKirim <b>nama {label}</b> baru Anda:",
+        f"➕ <b>Buat {label}</b>{note}\n\nKirim <b>nama {label}</b> baru Anda:",
         parse_mode=ParseMode.HTML,
     )
     cq.answer()
@@ -792,6 +898,7 @@ async def cb_choose_owner(cq: CallbackQuery, state: FSMContext):
         owner_label=label,
         source="bot",
     )
+    await services.record_creation(cq.from_user.id)
     cq.answer()
 
 
@@ -823,6 +930,7 @@ def admin_kb() -> InlineKeyboardMarkup:
         [B("📊 Statistik", "admin_stats"), B("🤖 Tes AI", "admin_aitest")],
         [B("✏️ Edit Channel", "admin_editch"), B("👁️ Detail Channel", "admin_chdetail")],
         [B("➕ Tambah Owner", "admin_addowner"), B("📋 Daftar Owner", "admin_ownerlist")],
+        [B("👥 Tambah Member", "admin_addmember"), B("📋 Daftar Member", "admin_memberlist")],
         [B("📋 Daftar Channel", "admin_channellist")],
         [B("📢 Broadcast", "admin_broadcast")],
         [B("↩️ Menu Utama", "main")],
@@ -847,12 +955,15 @@ async def cb_admin_stats(cq: CallbackQuery):
     users = await db.get_users()
     channels = await db.get_channels()
     owners = await db.get_owners()
+    members = await db.get_creators()
     cfg = await services.get_cfg()
+    glimit = await services.global_create_limit()
     txt = (
         "📊 <b>Statistik PallBot</b>\n\n"
         f"👤 User terdaftar: <b>{len(users)}</b>\n"
         f"📺 Channel/Grup dibuat: <b>{len(channels)}</b>\n"
-        f"👑 Owner terdaftar: <b>{len(owners)}</b>\n\n"
+        f"👑 Owner: <b>{len(owners)}</b> • 👥 Member boleh create: <b>{len(members)}</b>\n"
+        f"🔢 Limit create global (member): <b>{glimit}</b>\n\n"
         f"🤖 Bot: {'🟢 online' if appstate.bot_online else '🔴 offline'} "
         f"({'@' + appstate.bot_username if appstate.bot_username else '-'})\n"
         f"🛰️ MTProto: {'🟢 online' if appstate.mtproto_online else ('🟡 siap (perlu start)' if appstate.mtproto_ready else '🔴 belum di-set')}\n"
@@ -920,6 +1031,129 @@ async def cb_admin_broadcast(cq: CallbackQuery, state: FSMContext):
     await state.set_state(Broadcast.wait)
     await cq.message.answer("📢 Kirim <b>teks broadcast</b> (dikirim ke semua user):")
     cq.answer()
+
+
+# ---------------------------------------------------------------------------
+# 👥 Manajemen member (yang boleh create channel/grup, dgn limit)
+# ---------------------------------------------------------------------------
+@router.callback_query(F.data == "admin_addmember")
+async def cb_admin_addmember(cq: CallbackQuery, state: FSMContext):
+    if not await is_admin(cq.from_user.id):
+        cq.answer("❌ Khusus owner bot", show_alert=True)
+        return
+    await state.set_state(AddMember.wait_id)
+    await state.update_data(mode="new")
+    await cq.message.answer(
+        "👥 <b>Tambah member (boleh create channel/grup)</b>\n\n"
+        "Kirim <b>ID</b> Telegram member (angka):")
+    cq.answer()
+
+
+@router.callback_query(F.data == "admin_memberlist")
+async def cb_admin_memberlist(cq: CallbackQuery):
+    if not await is_admin(cq.from_user.id):
+        cq.answer("❌ Khusus owner bot", show_alert=True)
+        return
+    members = await db.get_creators()
+    glimit = await services.global_create_limit()
+    if not members:
+        txt = "📋 Belum ada member yang di-whitelist.\n" \
+              "Default limit global: <b>%d</b> (ubah di Pengaturan)." % glimit
+    else:
+        lines = []
+        for m in members:
+            limit = m["limit"] if m.get("limit") else f"{glimit} (global)"
+            lines.append(
+                f"• <b>{m['label']}</b> — <code>{m['tg_id']}</code>\n"
+                f"   Limit: {limit} | Terpakai: <b>{m['used']}</b>\n"
+                f"   [✏️ Edit limit] [🗑️ Hapus]"
+            )
+        txt = "📋 <b>Member (boleh create)</b>\n\n" + "\n".join(lines)
+    rows = []
+    for m in members:
+        rows.append([
+            B(f"✏️ {m['label']} ({m['tg_id']})", f"member_editlimit:{m['tg_id']}"),
+            B(f"🗑️ {m['tg_id']}", f"member_del:{m['tg_id']}"),
+        ])
+    rows.append([B("↩️ Panel Admin", "menu_admin")])
+    kb = InlineKeyboardMarkup(inline_keyboard=rows)
+    await cq.message.edit_text(txt, reply_markup=kb, parse_mode=ParseMode.HTML)
+    cq.answer()
+
+
+@router.callback_query(F.data.startswith("member_editlimit:"))
+async def cb_member_editlimit(cq: CallbackQuery, state: FSMContext):
+    if not await is_admin(cq.from_user.id):
+        cq.answer("❌ Khusus owner bot", show_alert=True)
+        return
+    tg_id = int(cq.data.split(":", 1)[1])
+    await state.set_state(AddMember.wait_limit)
+    await state.update_data(mode="edit", tg_id=tg_id)
+    await cq.message.answer(
+        f"✏️ Kirim <b>limit baru</b> untuk member {tg_id} "
+        "(jumlah create maksimum). Ketik <b>0</b> = pakai default global.")
+    cq.answer()
+
+
+@router.callback_query(F.data.startswith("member_del:"))
+async def cb_member_del(cq: CallbackQuery, state: FSMContext):
+    if not await is_admin(cq.from_user.id):
+        cq.answer("❌ Khusus owner bot", show_alert=True)
+        return
+    tg_id = int(cq.data.split(":", 1)[1])
+    await db.remove_creator(tg_id)
+    await cq.answer(f"Member {tg_id} dihapus", show_alert=True)
+    # refresh daftar
+    await cb_admin_memberlist(cq)
+
+
+@router.message(AddMember.wait_id)
+async def fsm_addmember_id(message: Message, state: FSMContext):
+    txt = (message.text or "").strip()
+    if not txt.lstrip("-").isdigit():
+        await message.answer("ID harus angka (contoh: 8861238621). /menu untuk batal.")
+        return
+    await state.update_data(oid=txt)
+    await state.set_state(AddMember.wait_label)
+    await message.answer(f"Kirim <b>label/nama</b> untuk member {txt}:")
+
+
+@router.message(AddMember.wait_label)
+async def fsm_addmember_label(message: Message, state: FSMContext):
+    await state.update_data(label=(message.text or "Member").strip()[:60])
+    await state.set_state(AddMember.wait_limit)
+    g = await services.global_create_limit()
+    await message.answer(
+        f"Kirim <b>limit create</b> untuk member ini "
+        f"(jumlah channel/grup maksimum). Ketik <b>0</b> = pakai default global ({g}).")
+
+
+@router.message(AddMember.wait_limit)
+async def fsm_addmember_limit(message: Message, state: FSMContext):
+    data = await state.get_data()
+    txt = (message.text or "").strip().lstrip("#")
+    if not txt.isdigit():
+        await message.answer("Limit harus angka (0 = default global). /menu untuk batal.")
+        return
+    limit = int(txt)
+    if data.get("mode") == "edit":
+        tg_id = int(data["tg_id"])
+        if limit == 0:
+            await db.set_creator_limit(tg_id, None)
+        else:
+            await db.set_creator_limit(tg_id, limit)
+        await state.clear()
+        await message.answer(f"✅ Limit member {tg_id} di-update: "
+                             f"{'default global' if limit == 0 else limit}")
+        return
+    await db.add_creator(int(data["oid"]), data.get("label", "Member"),
+                         limit if limit > 0 else None)
+    await state.clear()
+    g = await services.global_create_limit()
+    await message.answer(
+        f"✅ Member {data['oid']} ditambahkan (limit: "
+        f"{'default global (' + str(g) + ')' if limit == 0 else str(limit)}). "
+        f"Member sekarang bisa create channel/grup lewat menu bot.")
 
 
 # ---------------------------------------------------------------------------
@@ -1257,6 +1491,7 @@ async def fsm_create_custom_id(message: Message, state: FSMContext):
         owner_label=txt,
         source="bot",
     )
+    await services.record_creation(message.from_user.id)
 
 
 @router.message(JoinInvite.wait)

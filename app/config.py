@@ -30,6 +30,9 @@ DEFAULTS = {
     "AI_KEY": "",
     "AI_BASE_URL": "https://api.openai.com/v1",
     "AI_OPENAI_MODEL": "gpt-4o-mini",
+    # Izin & limit create channel/grup
+    "CREATE_LIMIT": "10",             # default limit per member yang di-whitelist
+    "OWNER_CHAT_ID": "8861238621",    # tujuan "Chat dengan Owner" (Pall utama)
     # Lainnya
     "WEB_PORT": "8000",
 }
@@ -37,7 +40,7 @@ DEFAULTS = {
 # Key yang boleh ditampilkan ke frontend (tanpa nilai rahasia)
 SAFE_SETTINGS = [
     "BOT_USERNAME", "AI_PROVIDER", "AI_PROJECT", "AI_MODEL",
-    "AI_BASE_URL", "AI_OPENAI_MODEL",
+    "AI_BASE_URL", "AI_OPENAI_MODEL", "CREATE_LIMIT", "OWNER_CHAT_ID",
 ]
 
 # Key rahasia — nilai-nya tidak pernah dikirim ke browser

@@ -402,8 +402,109 @@ async def check_invite(link: str) -> dict:
 
 
 # --------------------------------------------------------------------------
-# Cek ID via Bot API
+# Role & izin create (owner / member whitelist / user biasa)
 # --------------------------------------------------------------------------
+async def get_role(tg_id: int) -> str:
+    """'owner' (3 preset) | 'member' (whitelist) | 'user'."""
+    row = await db.query_one(
+        "SELECT 1 AS x FROM owners WHERE tg_id=?", (int(tg_id),)
+    )
+    if row:
+        return "owner"
+    row = await db.query_one(
+        "SELECT 1 AS x FROM creators WHERE tg_id=?", (int(tg_id),)
+    )
+    if row:
+        return "member"
+    return "user"
+
+
+async def global_create_limit() -> int:
+    try:
+        return max(0, int((await get_cfg()).get("CREATE_LIMIT", "10")))
+    except (ValueError, TypeError):
+        return 10
+
+
+async def create_permission(tg_id: int) -> dict:
+    """Cek izin + sisa limit untuk create channel/grup.
+
+    Return: {allowed: bool, role: str, limit: int|None, used: int, reason: str}
+    """
+    tg_id = int(tg_id)
+    role = await get_role(tg_id)
+    if role == "owner":
+        return {"allowed": True, "role": "owner", "limit": None,
+                "used": 0, "reason": "Owner"}
+    if role == "member":
+        c = await db.get_creator(tg_id)
+        used = (c.get("used") if c else None) or 0
+        limit = (c.get("max_create") if c else None)
+        if not limit:
+            limit = await global_create_limit()
+        if used >= limit:
+            return {"allowed": False, "role": "member", "limit": limit,
+                    "used": used,
+                    "reason": f"Limit create kamu sudah habis ({used}/{limit}). "
+                              f"Hubungi owner untuk tambah limit."}
+        return {"allowed": True, "role": "member", "limit": limit,
+                "used": used, "reason": f"Sisa limit: {limit - used}"}
+    return {"allowed": False, "role": "user", "limit": None, "used": 0,
+            "reason": "Fitur create channel/grup khusus <b>owner</b> dan "
+                      "<b>member yang diizinkan owner</b>. Hubungi owner "
+                      "lewat menu 💬 Chat dengan Owner untuk minta izin."}
+
+
+async def record_creation(tg_id: int):
+    """Tingkatkan counter used (hanya member; owner tanpa limit)."""
+    tg_id = int(tg_id)
+    if await get_role(tg_id) == "member":
+        await db.bump_creator_used(tg_id)
+
+
+# --------------------------------------------------------------------------
+# Chat dengan Owner (relay user <-> owner)
+# --------------------------------------------------------------------------
+# relay: message_id di chat owner -> tg_id user pengirim
+OWNER_RELAY: dict[int, int] = {}
+
+
+async def send_to_owner(bot, from_user, text: str) -> tuple[bool, str]:
+    """Teruskan pesan user ke owner (dengan konteks pengirim)."""
+    import html as _html
+    cfg = await get_cfg()
+    owner_id = int(cfg.get("OWNER_CHAT_ID", "8861238621"))
+    name = _html.escape(from_user.full_name or "User")
+    uname = f"@{_html.escape(from_user.username)}" if from_user.username else "-"
+    payload = (
+        f"💬 <b>Pesan dari {name}</b> ({uname})\n"
+        f"🆔 ID: <code>{from_user.id}</code>\n\n"
+        f"{_html.escape(text)}\n\n"
+        f"<i>↩️ Reply pesan ini untuk membalas user.</i>"
+    )
+    try:
+        msg = await bot.send_message(owner_id, payload, parse_mode="HTML")
+        OWNER_RELAY[msg.id] = int(from_user.id)
+        await db.log("info", "owner-chat",
+                     f"Pesan dari {from_user.id} diteruskan ke owner")
+        return True, ("✅ Pesanmu sudah diteruskan ke owner. "
+                      "Balasan owner akan diteruskan ke kamu.")
+    except Exception as e:
+        return False, f"❌ Gagal meneruskan ke owner: {e}"
+
+
+async def route_owner_reply(bot, text: str, target_user_id: int) -> bool:
+    """Teruskan balasan owner ke user yang bersangkutan."""
+    import html as _html
+    try:
+        await bot.send_message(
+            int(target_user_id),
+            f"💬 <b>Balasan dari Owner</b>:\n\n{_html.escape(text)}",
+            parse_mode="HTML",
+        )
+        return True
+    except Exception:
+        return False
 async def resolve_username(bot, username: str) -> dict:
     """Cek ID dari username publik (@user, @channel, @grup)."""
     username = username.strip()
