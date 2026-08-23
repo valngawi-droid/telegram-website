@@ -1,0 +1,11 @@
+.env
+data/
+__pycache__/
+*.pyc
+*.session
+*.session-journal
+.venv/
+venv/
+node_modules/
+*.log
+.DS_Store

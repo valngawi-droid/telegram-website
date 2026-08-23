@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Login Admin — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="login-wrap">
+  <div class="card login-card">
+    <div class="login-logo">🤖</div>
+    <h1>Login Admin</h1>
+    <p class="muted">Masuk untuk mengakses panel admin PallBot.</p>
+    {% if error %}<div class="alert alert-err">{{ error }}</div>{% endif %}
+    <form onsubmit="doLogin(event)">
+      <label>Password</label>
+      <input type="password" id="pw" autofocus placeholder="Password admin" />
+      <button class="btn btn-primary" type="submit">Masuk</button>
+    </form>
+    <p class="hint center">Default password: <code>pall123</code> — ubah di menu Pengaturan setelah login.</p>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function doLogin(e) {
+  e.preventDefault();
+  const pw = document.getElementById('pw').value;
+  const r = await fetch('/api/login', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({password: pw})
+  });
+  if (r.ok) { window.location = '/admin'; }
+  else { alert('Password salah'); }
+}
+</script>
+{% endblock %}

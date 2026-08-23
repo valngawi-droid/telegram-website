@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Cek ID — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>🔍 Cek ID</h1>
+  <p>Cek ID Telegram dari username publik, atau dari ID channel/grup.</p>
+</div>
+
+<div class="card tool-card">
+  <label for="q">Username / ID (contoh: <code>@pall</code>, <code>-1001234567890</code>)</label>
+  <div class="tool-row">
+    <input id="q" type="text" placeholder="@username atau -1001234567890" />
+    <button class="btn btn-primary" onclick="cekId()">Cek ID</button>
+  </div>
+  <div id="cekid-result" class="result-box"></div>
+  <p class="hint">💡 Untuk channel/grup <b>privat</b> (tanpa username), forward 1 pesan dari channel/grup tersebut ke bot di Telegram — bot akan menjawab ID-nya.</p>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function cekId() {
+  const q = document.getElementById('q').value.trim();
+  const box = document.getElementById('cekid-result');
+  if (!q) return;
+  box.innerHTML = '⏳ Mengecek...';
+  try {
+    const r = await fetch('/api/cekid', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username: q})
+    });
+    const d = await r.json();
+    if (!d.ok) { box.innerHTML = '<span class="err">' + d.message + '</span>'; return; }
+    const t = {user:'User', channel:'Channel', group:'Grup', supergroup:'Grup (Super)'}[d.type] || d.type;
+    box.innerHTML =
+      '<div class="ok">✅ Ditemukan</div>' +
+      '<div class="kv"><span>Nama</span><b>' + (d.title || '-') + '</b></div>' +
+      '<div class="kv"><span>Username</span><b>' + (d.username ? '@' + d.username : '-') + '</b></div>' +
+      '<div class="kv"><span>Tipe</span><b>' + t + '</b></div>' +
+      '<div class="kv"><span>ID</span><b class="mono">' + d.display_id + '</b></div>';
+  } catch (e) {
+    box.innerHTML = '<span class="err">Gagal: ' + e + '</span>';
+  }
+}
+document.getElementById('q').addEventListener('keydown', e => { if (e.key === 'Enter') cekId(); });
+</script>
+{% endblock %}

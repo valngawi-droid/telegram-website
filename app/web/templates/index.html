@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div class="hero-badge">✨ +9999 Fitur • Multi Tombol • AI Ready</div>
+  <h1>Bot Telegram <span class="grad">Multi Fungsi</span><br/>× Website, Jalan di VPS</h1>
+  <p class="hero-sub">
+    Cek ID, buat channel & grup (pilih owner), AI Chat, tambah bot ke channel/grup —
+    semua dalam satu bot. Dibuat oleh <b>Pall</b>.
+  </p>
+  <div class="hero-actions">
+    <a class="btn btn-primary btn-lg" href="https://t.me/{{ bot_username or 'namabot' }}" target="_blank">🤖 Tambah Bot di Telegram</a>
+    <a class="btn btn-outline btn-lg" href="/admin">⚙️ Panel Admin</a>
+  </div>
+  <div class="status-pill {% if bot_online %}on{% else %}off{% endif %}">
+    <span class="dot"></span>
+    {% if bot_online %}Bot online — @{{ bot_username }}{% else %}Bot offline — isi token di Panel Admin{% endif %}
+  </div>
+</section>
+
+<section class="grid grid-4">
+  <div class="card feature">
+    <div class="feature-icon">🔍</div>
+    <h3>Cek ID</h3>
+    <p>ID diri sendiri, ID via username, ID channel/grup, dan cek lewat forward pesan.</p>
+  </div>
+  <div class="card feature">
+    <div class="feature-icon">➕</div>
+    <h3>Buat Channel & Grup</h3>
+    <p>Bot membuatkan channel/grup baru dan memindahkan ownership ke owner pilihan.</p>
+  </div>
+  <div class="card feature">
+    <div class="feature-icon">👑</div>
+    <h3>Pilih Owner</h3>
+    <p>3 owner siap pakai — Pall (utama), Pall (akun 2), dan pacar. Bisa tambah ID baru.</p>
+  </div>
+  <div class="card feature">
+    <div class="feature-icon">🤖</div>
+    <h3>AI Chat</h3>
+    <p>Ngobrol dengan AI TELEGRAM di dalam bot maupun di website.</p>
+  </div>
+  <div class="card feature">
+    <div class="feature-icon">📢</div>
+    <h3>Tambah Bot</h3>
+    <p>Kirim invite link channel/grup, bot langsung join otomatis.</p>
+  </div>
+  <div class="card feature">
+    <div class="feature-icon">📊</div>
+    <h3>Dashboard</h3>
+    <p>Statistik user, channel yang dibuat, status bot & AI — realtime di website.</p>
+  </div>
+  <div class="card feature">
+    <div class="feature-icon">📢</div>
+    <h3>Broadcast</h3>
+    <p>Kirim pesan massanya ke semua user yang pernah pakai bot (khusus admin).</p>
+  </div>
+  <div class="card feature">
+    <div class="feature-icon">🛡️</div>
+    <h3>Panel Admin</h3>
+    <p>Kelola owner, settingan bot & AI, semua dari browser — aman, password login.</p>
+  </div>
+</section>
+
+<section class="howto">
+  <h2>🚀 Cara pakai</h2>
+  <div class="steps">
+    <div class="step"><div class="step-num">1</div><div><b>Deploy di VPS</b><br/>Jalankan script <code>vps.sh</code> — bot + website langsung jalan.</div></div>
+    <div class="step"><div class="step-num">2</div><div><b>Isi token</b><br/>Buat bot di @BotFather, lalu isi token di <b>Panel Admin → Pengaturan</b>.</div></div>
+    <div class="step"><div class="step-num">3</div><div><b>Mulai pakai</b><br/>Tambah bot di Telegram, tekan /start, pilih menu. Selesai! 🎉</div></div>
+  </div>
+</section>
+{% endblock %}

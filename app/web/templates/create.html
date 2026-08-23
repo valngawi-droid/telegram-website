@@ -1,0 +1,88 @@
+{% extends "admin_base.html" %}
+{% set title = "Buat Channel / Grup" %}
+{% set active = "buat" %}
+{% block admin %}
+<div class="card tool-card">
+  <h3>➕ Buat Channel atau Grup Baru</h3>
+  <p class="muted">Bot akan membuat channel/grup melalui MTProto, lalu memindahkan
+  ownership ke owner pilihan. Butuh BOT_TOKEN + API_ID + API_HASH terisi (menu Pengaturan).</p>
+
+  <label>Nama Channel / Grup</label>
+  <input id="f-name" type="text" placeholder="Contoh: Grup Hype Pall" />
+
+  <div class="row-2">
+    <div>
+      <label>Tipe</label>
+      <select id="f-type">
+        <option value="channel">📺 Channel</option>
+        <option value="group">👥 Grup (Super)</option>
+      </select>
+    </div>
+    <div>
+      <label>Owner</label>
+      <select id="f-owner">
+        {% for o in owners %}
+        <option value="{{ o.tg_id }}">{{ o.label }} ({{ o.tg_id }})</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <label>Deskripsi (opsional)</label>
+  <textarea id="f-about" rows="2" placeholder="Deskripsi singkat channel/grup..."></textarea>
+
+  <button class="btn btn-primary btn-lg" onclick="doCreate()">🚀 Buat Sekarang</button>
+  <div id="create-result" class="result-box"></div>
+</div>
+
+<div class="card">
+  <h3>📢 Tambah Bot ke Channel/Grup (invite link)</h3>
+  <p class="muted">Bot akan join channel/grup lewat invite link.</p>
+  <div class="tool-row">
+    <input id="f-invite" type="text" placeholder="https://t.me/+AbCd123... atau https://t.me/namagrup" />
+    <button class="btn btn-outline" onclick="doJoin()">Join</button>
+  </div>
+  <div id="join-result" class="result-box"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function doCreate() {
+  const box = document.getElementById('create-result');
+  const payload = {
+    name: document.getElementById('f-name').value.trim(),
+    type: document.getElementById('f-type').value,
+    about: document.getElementById('f-about').value.trim(),
+    owner_tg_id: parseInt(document.getElementById('f-owner').value)
+  };
+  if (!payload.name) { box.innerHTML = '<span class="err">Nama wajib diisi</span>'; return; }
+  box.innerHTML = '⏳ Membuat ' + payload.type + '... (bisa 5-15 detik)';
+  const r = await fetch('/api/create', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const d = await r.json();
+  if (!d.ok) { box.innerHTML = '<span class="err">' + d.message + '</span>'; return; }
+  box.innerHTML =
+    '<div class="ok">🎉 Berhasil dibuat!</div>' +
+    '<div class="kv"><span>Nama</span><b>' + d.name + '</b></div>' +
+    '<div class="kv"><span>ID</span><b class="mono">' + d.tg_id + '</b></div>' +
+    (d.username ? '<div class="kv"><span>Link</span><b><a href="https://t.me/' + d.username + '" target="_blank">t.me/' + d.username + '</a></b></div>' : '') +
+    (d.invite && !d.username ? '<div class="kv"><span>Invite</span><b class="mono">' + d.invite + '</b></div>' : '') +
+    '<div class="kv"><span>Owner</span><b>' + d.owner_tg_id + '</b></div>' +
+    (d.message ? '<div class="kv"><span>Catatan</span><b>' + d.message + '</b></div>' : '');
+}
+async function doJoin() {
+  const box = document.getElementById('join-result');
+  const link = document.getElementById('f-invite').value.trim();
+  if (!link) return;
+  box.innerHTML = '⏳ Bot sedang join...';
+  const r = await fetch('/api/join', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({link: link})
+  });
+  const d = await r.json();
+  box.innerHTML = '<span class="' + (d.ok ? 'ok' : 'err') + '">' + d.message + '</span>';
+}
+</script>
+{% endblock %}

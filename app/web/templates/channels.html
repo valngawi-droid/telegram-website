@@ -1,0 +1,46 @@
+{% extends "admin_base.html" %}
+{% set title = "Daftar Channel / Grup" %}
+{% set active = "ch" %}
+{% block admin %}
+<div class="card">
+  <div class="card-head">
+    <h3>📺 Channel & Grup yang Dibuat ({{ channels|length }})</h3>
+    <a class="btn btn-small btn-primary" href="/admin/buat">➕ Buat Baru</a>
+  </div>
+  {% if channels %}
+  <table class="table">
+    <thead>
+      <tr><th>Nama</th><th>Tipe</th><th>ID</th><th>Link</th><th>Owner</th><th>Dibuat</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for c in channels %}
+      <tr>
+        <td><b>{{ c.name }}</b><br/><span class="muted">{{ c.source }}</span></td>
+        <td>{{ c.type }}</td>
+        <td class="mono">{{ c.tg_id }}</td>
+        <td>
+          {% if c.username %}<a href="https://t.me/{{ c.username }}" target="_blank">t.me/{{ c.username }}</a>
+          {% elif c.invite %}<a href="{{ c.invite }}" target="_blank">invite</a>
+          {% else %}-{% endif %}
+        </td>
+        <td>{{ c.owner_label or c.owner_tg_id }}</td>
+        <td>{{ c.created_at|ts }}</td>
+        <td><button class="btn btn-small btn-danger" onclick="delCh({{ c.id }})">🗑️</button></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Belum ada. <a href="/admin/buat">Buat channel/grup pertama Anda →</a></p>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function delCh(id) {
+  if (!confirm('Hapus dari daftar? (channel di Telegram tidak ikut terhapus)')) return;
+  await fetch('/api/channels/' + id, {method: 'DELETE'});
+  location.reload();
+}
+</script>
+{% endblock %}

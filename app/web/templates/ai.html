@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}AI Chat — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>🤖 AI TELEGRAM</h1>
+  <p>Ngobrol dengan AI. Riwayat percakapan disimpan per perangkat.</p>
+</div>
+
+<div class="chat-card card">
+  <div id="chat-log" class="chat-log">
+    <div class="msg bot">
+      <div class="bubble">Halo! 👋 Saya <b>AI TELEGRAM</b>. Ada yang bisa saya bantu? (Soal channel, grup, bot, atau apa aja)</div>
+    </div>
+  </div>
+  <div class="chat-input">
+    <input id="chat-input" type="text" placeholder="Ketik pesan Anda..." autocomplete="off" />
+    <button class="btn btn-primary" id="chat-send">Kirim</button>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let userKey = localStorage.getItem('pall_ai_key');
+if (!userKey) { userKey = 'web-' + Math.random().toString(36).slice(2) + Date.now(); localStorage.setItem('pall_ai_key', userKey); }
+const log = document.getElementById('chat-log');
+const input = document.getElementById('chat-input');
+
+function addMsg(role, text) {
+  const wrap = document.createElement('div');
+  wrap.className = 'msg ' + (role === 'user' ? 'user' : 'bot');
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.textContent = text;
+  wrap.appendChild(bubble);
+  log.appendChild(wrap);
+  log.scrollTop = log.scrollHeight;
+  return bubble;
+}
+
+async function send() {
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  addMsg('user', text);
+  const typing = addMsg('bot', '⏳');
+  try {
+    const r = await fetch('/api/ai', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({message: text, user_key: userKey})
+    });
+    const d = await r.json();
+    typing.textContent = d.ok ? d.reply : (d.message || 'Terjadi kesalahan');
+    if (!d.ok) typing.classList.add('err');
+  } catch (e) {
+    typing.textContent = 'Gagal terhubung: ' + e;
+    typing.classList.add('err');
+  }
+  log.scrollTop = log.scrollHeight;
+}
+document.getElementById('chat-send').onclick = send;
+input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+</script>
+{% endblock %}

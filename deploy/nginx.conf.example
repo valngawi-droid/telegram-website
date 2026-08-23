@@ -1,0 +1,33 @@
+# Contoh Nginx reverse proxy untuk PallBot
+# Salin ke /etc/nginx/sites-available/pallbot, symlink ke sites-enabled,
+# sesuaikan server_name (domain atau IP VPS), lalu:
+#   nginx -t && systemctl reload nginx
+#
+# Jika pakai domain + HTTPS:  certbot --nginx -d DOMAIN_ANDA
+# (certbot akan membuat block server 443 otomatis)
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name _;   # ganti: DOMAIN_ANDA atau IP VPS
+
+    # opsional: redirect ke HTTPS setelah certbot
+    # return 301 https://$host$request_uri;
+
+    access_log /var/log/nginx/pallbot.access.log;
+    error_log  /var/log/nginx/pallbot.error.log;
+
+    client_max_body_size 20m;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 300s;
+    }
+}
