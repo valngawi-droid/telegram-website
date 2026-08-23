@@ -27,7 +27,7 @@ DEFAULTS = {
     "AI_PROVIDER": "gemini",          # gemini | openai
     "AI_PROJECT": "216372639628",     # project number Google (Gemini)
     "AI_MODEL": "gemini-2.0-flash",
-    "AI_KEY": "",
+    "AI_KEY": "",                     # JANGAN hardcode — isi di .env / Panel Admin
     "AI_BASE_URL": "https://api.openai.com/v1",
     "AI_OPENAI_MODEL": "gpt-4o-mini",
     # Izin & limit create channel/grup

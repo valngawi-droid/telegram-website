@@ -224,7 +224,7 @@ Default sudah di-set:
 | `AI_PROVIDER` | `gemini` |
 | `AI_PROJECT` | `216372639628` |
 | `AI_MODEL` | `gemini-2.0-flash` |
-| `AI_KEY` | `AQ.Ab8RN6Ix-…` (dari kamu) |
+| `AI_KEY` | *(kosong — isi di `.env` VPS / Panel Admin, jangan di-commit)* |
 
 > ⚠️ Catatan: key format `AQ.` kadang ditolak REST endpoint Gemini
 > (`401 ACCESS_TOKEN_TYPE_UNSUPPORTED`) — masalah umum format key baru ini.
