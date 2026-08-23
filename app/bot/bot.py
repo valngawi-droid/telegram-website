@@ -1636,25 +1636,37 @@ class BotManager:
         self.task = asyncio.create_task(self._poll())
 
     async def _poll(self):
-        dp = Dispatcher(storage=MemoryStorage())
-        dp.include_router(router)
-        try:
-            await self.bot.delete_webhook(drop_pending_updates=True)
-            me = await self.bot.get_me()
-            appstate.bot_online = True
-            appstate.bot_id = me.id
-            appstate.bot_username = me.username or ""
-            await db.log("info", "bot", f"Bot online: @{me.username} (id={me.id})")
-            await dp.start_polling(self.bot)
-        except asyncio.CancelledError:
-            pass
-        except Exception as e:
-            appstate.bot_online = False
-            appstate.last_error = str(e)
-            await db.log("error", "bot", f"Polling error: {e}")
-            log.exception("bot polling error")
-        finally:
-            appstate.bot_online = False
+        # Retry loop: kalau network error / gangguan saat start, coba lagi
+        # setiap 15 detik (penting untuk keandalan di VPS).
+        while True:
+            dp = Dispatcher(storage=MemoryStorage())
+            dp.include_router(router)
+            try:
+                await self.bot.delete_webhook(drop_pending_updates=True)
+                me = await self.bot.get_me()
+                appstate.bot_online = True
+                appstate.bot_id = me.id
+                appstate.bot_username = me.username or ""
+                await db.log("info", "bot", f"Bot online: @{me.username} (id={me.id})")
+                await dp.start_polling(self.bot)
+                break  # start_polling return = berhenti normal
+            except asyncio.CancelledError:
+                appstate.bot_online = False
+                raise
+            except Exception as e:
+                appstate.bot_online = False
+                appstate.last_error = str(e)[:300]
+                try:
+                    await db.log("error", "bot",
+                                 f"Polling error: {e} — auto-retry 15 dtk")
+                except Exception:
+                    pass
+                log.warning("bot polling error, retry dalam 15s: %s", e)
+                try:
+                    await asyncio.sleep(15)
+                except asyncio.CancelledError:
+                    appstate.bot_online = False
+                    raise
 
     async def stop(self):
         if self.task:
