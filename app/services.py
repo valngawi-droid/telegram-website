@@ -353,6 +353,54 @@ async def delete_entity(tg_id: int) -> dict:
         return {"ok": False, "message": f"❌ Gagal hapus: {e}"}
 
 
+async def set_username(tg_id: int, username: str) -> dict:
+    """Set username publik (@...) untuk channel/grup."""
+    from telethon.tl.functions.channels import UpdateUsernameRequest
+
+    client = await get_mtproto()
+    if client is None:
+        ok, msg = await start_mtproto(await get_cfg())
+        if not ok:
+            return {"ok": False, "message": msg}
+        client = await get_mtproto()
+    username = username.strip().lstrip("@")
+    if not username:
+        return {"ok": False, "message": "❌ Username kosong"}
+    try:
+        peer = await client.get_input_entity(int(tg_id))
+        await client(UpdateUsernameRequest(channel=peer, username=username))
+        return {"ok": True, "username": username,
+                "message": f"✅ Username publik di-set: @{username}"}
+    except Exception as e:
+        return {"ok": False, "message": f"❌ Gagal set username: {e}"}
+
+
+async def check_invite(link: str) -> dict:
+    """Cek invite link channel/grup sebelum join (preview info)."""
+    from telethon.tl.functions.messages import CheckChatInviteRequest
+
+    client = await get_mtproto()
+    if client is None:
+        ok, msg = await start_mtproto(await get_cfg())
+        if not ok:
+            return {"ok": False, "message": msg}
+        client = await get_mtproto()
+    link = link.strip()
+    if link and not link.startswith("http") and not link.startswith("@"):
+        link = f"https://t.me/+{link}" if not link.startswith("/") else link
+    try:
+        chat = await client(CheckChatInviteRequest(link))
+        return {
+            "ok": True,
+            "title": getattr(chat, "title", "") or getattr(chat, "username", "") or "?",
+            "username": getattr(chat, "username", "") or "",
+            "participants_count": getattr(chat, "participants_count", 0),
+            "type": getattr(chat, "broadcast", False) and "channel" or "group",
+        }
+    except Exception as e:
+        return {"ok": False, "message": f"❌ Invite link tidak valid / tidak bisa diakses: {e}"}
+
+
 # --------------------------------------------------------------------------
 # Cek ID via Bot API
 # --------------------------------------------------------------------------

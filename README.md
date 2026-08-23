@@ -40,6 +40,16 @@ Bot Telegram (aiogram 3)      Website (FastAPI + Jinja2)
 | Statistik & log | ✅ (admin) | ✅ |
 | Kelola daftar owner | ✅ (admin) | ✅ |
 | Ubah token / API / AI config tanpa edit file | — | ✅ |
+| **Moderasi grup**: `/kick` `/ban` `/unban` `/mute` `/unmute` | ✅ (bot admin grup) | — |
+| **Welcome message** grup (`/setwelcome`, sapa member baru auto) | ✅ | — |
+| **Pengingat** pribadi (`/ingat 5m pesan`, `/daftaringat`, `/hapusingat`) | ✅ | — |
+| **Cek invite link** valid tidak (`/ceklink`) | ✅ | — |
+| **Broadcast ke semua channel** (`/bcchannel`) | ✅ (admin) | — |
+| `/waktu` (WIB) & `/random` | ✅ | — |
+| Buat channel dengan **username publik @** (form website / MTProto) | — | ✅ |
+| **Halaman Channel publik** (showroom + QR code + search) — bisa di-share | — | ✅ |
+| AI chat: quick prompt (deskripsi channel, caption, terjemahan, ide nama) | — | ✅ |
+| Dashboard: uptime server + status live auto-refresh 10 dtk | — | ✅ |
 | **PWA — install sebagai aplikasi di HP** (offline, ikon, shortcut) | — | ✅ |
 | Banner, logo & loading screen animasi | — | ✅ |
 
@@ -151,7 +161,15 @@ Kirim `/start` ke bot → muncul **menu tombol**:
    (ubah nama/deskripsi, invite baru, detail member, hapus channel),
    tambah/list owner, daftar channel, broadcast.
 
-Komando: `/start` `/menu` `/help` `/id` `/ping` `/ai <pertanyaan>`
+**Moderasi grup** (bot harus admin grup — reply pesan member atau `@username`):
+`/kick` (keluarkan sementara) • `/ban` (permanen) • `/unban` • `/mute` (1 jam) • `/unmute`
+
+**Grup & utilitas:**
+- `/setwelcome Selamat datang, {nama}!` — sapa member baru otomatis
+- `/ingat 30m beli makan` • `/ingat 2j` • `/daftaringat` • `/hapusingat 1`
+- `/ceklink https://t.me/+xxxx` — cek invite link valid/tidak (preview member)
+- `/waktu` (WIB) • `/random 1 100` atau `/random batu,kertas,gunting`
+- `/bcchannel pesan` (admin) — kirim pesan ke semua channel/grup milik bot
 
 ## 📱 Website → Aplikasi (PWA)
 

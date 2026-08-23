@@ -28,6 +28,14 @@
     </div>
   </div>
 
+  <div class="row-2">
+    <div>
+      <label>Username Publik (opsional)</label>
+      <input id="f-username" type="text" placeholder="@namachannel (tanpa spasi)" />
+    </div>
+    <div></div>
+  </div>
+
   <label>Deskripsi (opsional)</label>
   <textarea id="f-about" rows="2" placeholder="Deskripsi singkat channel/grup..."></textarea>
 
@@ -53,7 +61,8 @@ async function doCreate() {
     name: document.getElementById('f-name').value.trim(),
     type: document.getElementById('f-type').value,
     about: document.getElementById('f-about').value.trim(),
-    owner_tg_id: parseInt(document.getElementById('f-owner').value)
+    owner_tg_id: parseInt(document.getElementById('f-owner').value),
+    username: document.getElementById('f-username').value.trim()
   };
   if (!payload.name) { box.innerHTML = '<span class="err">Nama wajib diisi</span>'; return; }
   box.innerHTML = '⏳ Membuat ' + payload.type + '... (bisa 5-15 detik)';

@@ -16,6 +16,12 @@
       <div class="bubble">Halo! 👋 Saya <b>AI TELEGRAM</b>. Ada yang bisa saya bantu? (Soal channel, grup, bot, atau apa aja)</div>
     </div>
   </div>
+  <div class="chat-chips">
+    <button class="chip" data-q="Buatkan deskripsi channel yang keren untuk topik:">✍️ Deskripsi Channel</button>
+    <button class="chip" data-q="Buatkan caption Instagram yang menarik tentang">📸 Caption</button>
+    <button class="chip" data-q="Terjemahkan ke bahasa Inggris:">🌐 Terjemahkan</button>
+    <button class="chip" data-q="Ide nama channel tentang">💡 Ide Nama</button>
+  </div>
   <div class="chat-input">
     <input id="chat-input" type="text" placeholder="Ketik pesan Anda..." autocomplete="off" />
     <button class="btn btn-primary" id="chat-send">Kirim</button>
@@ -64,6 +70,13 @@ async function send() {
 }
 document.getElementById('chat-send').onclick = send;
 input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+
+document.querySelectorAll('.chip').forEach(ch => {
+  ch.addEventListener('click', () => {
+    input.value = ch.dataset.q;
+    input.focus();
+  });
+});
 
 async function clearChat() {
   if (!confirm('Hapus semua riwayat percakapan AI di perangkat ini?')) return;

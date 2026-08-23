@@ -274,6 +274,333 @@ async def cmd_id(message: Message):
 
 
 # ---------------------------------------------------------------------------
+# Utilitas cepat
+# ---------------------------------------------------------------------------
+@router.message(Command("waktu"))
+async def cmd_waktu(message: Message):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    now = datetime.now(ZoneInfo("Asia/Jakarta"))
+    await message.answer(
+        f"🕐 <b>{now.strftime('%A, %d %B %Y')}</b>\n"
+        f"⏰ {now.strftime('%H:%M:%S')} WIB"
+    )
+
+
+@router.message(Command("random"))
+async def cmd_random(message: Message):
+    import random as _r
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        await message.answer("Pakai: <code>/random 1 100</code> (angka) "
+                             "atau <code>/random a,b,c</code> (pilih acak).",
+                             parse_mode=ParseMode.HTML)
+        return
+    arg = parts[1].strip()
+    nums = arg.split()
+    if len(nums) == 2 and all(n.lstrip("-").isdigit() for n in nums):
+        lo, hi = int(nums[0]), int(nums[1])
+        if lo > hi:
+            lo, hi = hi, lo
+        res = _r.randint(lo, hi)
+    elif "," in arg:
+        opts = [x.strip() for x in arg.split(",") if x.strip()]
+        res = _r.choice(opts)
+    else:
+        await message.answer("Format salah. Contoh: <code>/random 1 10</code> "
+                             "atau <code>/random batu,kertas,gunting</code>",
+                             parse_mode=ParseMode.HTML)
+        return
+    await message.answer(f"🎲 <b>{res}</b>")
+
+
+@router.message(Command("ceklink"))
+async def cmd_ceklink(message: Message):
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        await message.answer("Pakai: <code>/ceklink https://t.me/+xxxx</code>",
+                             parse_mode=ParseMode.HTML)
+        return
+    d = await services.check_invite(parts[1].strip())
+    if not d.get("ok"):
+        await message.answer(d.get("message", "Gagal"))
+        return
+    t = "Channel" if d.get("type") == "channel" else "Grup"
+    await message.answer(
+        "✅ <b>Invite link VALID</b>\n\n"
+        f"Nama: {d['title']}\n"
+        f"Tipe: {t}\n"
+        f"Member: {d.get('participants_count', 0):,}\n"
+        f"Username: {'@' + d['username'] if d.get('username') else '-'}\n\n"
+        "Kirim tombol 📢 Tambah Bot + link ini kalau mau bot join.",
+        parse_mode=ParseMode.HTML,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Moderasi grup (butuh bot jadi admin grup)
+# ---------------------------------------------------------------------------
+async def _resolve_target(message: Message):
+    """Target dari reply, @username, atau ID."""
+    rt = message.reply_to_message
+    if rt and rt.from_user:
+        return rt.from_user, None
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) > 1:
+        arg = parts[1].strip()
+        if arg.lstrip("-").isdigit():
+            return int(arg), None
+        if arg.startswith("@"):
+            try:
+                chat = await message.bot.get_chat(arg)
+                if chat.type == "user":
+                    return chat, None
+            except Exception:
+                pass
+    return None, (parts[1].strip() if len(parts) > 1 else None)
+
+
+async def _mod_common(message: Message, action):
+    if message.chat.type not in ("group", "supergroup"):
+        await message.answer("Fitur moderasi hanya di grup.")
+        return
+    target, _ = await _resolve_target(message)
+    if target is None:
+        await message.answer(
+            "❌ Target tidak ditemukan. <b>Reply</b> pesan member, "
+            "atau pakai: <code>/ban @username</code> / <code>/ban 123456789</code>",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+    name = getattr(target, "full_name", None) or str(target)
+    tg_id = getattr(target, "id", target)
+    try:
+        if action == "kick":
+            import time as _t
+            await message.bot.ban_chat_member(
+                message.chat.id, tg_id, until_date=int(_t.time()) + 120)
+            await message.answer(f"👢 {name} dikeluarkan (bisa join lagi nanti).")
+        elif action == "ban":
+            await message.bot.ban_chat_member(message.chat.id, tg_id)
+            await message.answer(f"🔨 {name} di-BAN permanen.")
+        elif action == "unban":
+            await message.bot.unban_chat_member(message.chat.id, tg_id)
+            await message.answer(f"🕊️ {name} di-unban.")
+        elif action == "mute":
+            from aiogram.types import ChatPermissions
+            import time as _t
+            await message.bot.restrict_chat_member(
+                message.chat.id, tg_id, ChatPermissions(),
+                until_date=int(_t.time()) + 3600)
+            await message.answer(f"🔇 {name} di-mute 1 jam.")
+        elif action == "unmute":
+            from aiogram.types import ChatPermissions
+            await message.bot.restrict_chat_member(
+                message.chat.id, tg_id,
+                ChatPermissions(can_send_messages=True, can_send_audios=True,
+                                can_send_documents=True, can_send_photos=True,
+                                can_send_videos=True, can_send_video_notes=True,
+                                can_send_voice_notes=True, can_send_polls=True))
+            await message.answer(f"🔊 {name} bisa bicara lagi.")
+    except Exception as e:
+        msg = str(e)
+        if "not enough rights" in msg or "Forbidden" in msg or "RIGHTS" in msg.upper():
+            await message.answer(
+                f"❌ Bot tidak punya izin untuk {action}. "
+                "Jadikan bot <b>admin</b> grup dulu (izin: ban/restrict members).")
+        else:
+            await message.answer(f"❌ Gagal: {msg}")
+
+
+@router.message(Command("kick"))
+async def cmd_kick(message: Message):
+    await _mod_common(message, "kick")
+
+
+@router.message(Command("ban"))
+async def cmd_ban(message: Message):
+    await _mod_common(message, "ban")
+
+
+@router.message(Command("unban"))
+async def cmd_unban(message: Message):
+    await _mod_common(message, "unban")
+
+
+@router.message(Command("mute"))
+async def cmd_mute(message: Message):
+    await _mod_common(message, "mute")
+
+
+@router.message(Command("unmute"))
+async def cmd_unmute(message: Message):
+    await _mod_common(message, "unmute")
+
+
+# ---------------------------------------------------------------------------
+# Welcome message grup
+# ---------------------------------------------------------------------------
+async def _is_group_admin(message: Message) -> bool:
+    me = await message.bot.get_me()
+    try:
+        mem = await message.bot.get_chat_member(message.chat.id, me.id)
+        return mem.status in ("administrator", "creator")
+    except Exception:
+        return False
+
+
+@router.message(Command("setwelcome"))
+async def cmd_setwelcome(message: Message):
+    if message.chat.type not in ("group", "supergroup"):
+        await message.answer("Fitur welcome hanya di grup.")
+        return
+    if not await _is_group_admin(message):
+        await message.answer("❌ Hanya admin grup yang bisa set welcome.")
+        return
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        await message.answer(
+            'Pakai: <code>/setwelcome Selamat datang, {nama}! 🎉</code>\n'
+            "({nama} akan diganti nama member baru)")
+        return
+    await db.set_welcome(message.chat.id, parts[1].strip()[:500])
+    await message.answer("✅ Welcome message di-set. Member baru akan "
+                         "disambut otomatis oleh bot.")
+
+
+@router.message(Command("hapuswelcome"))
+async def cmd_hapuswelcome(message: Message):
+    if not await _is_group_admin(message):
+        await message.answer("❌ Hanya admin grup.")
+        return
+    await db.del_welcome(message.chat.id)
+    await message.answer("✅ Welcome message dihapus.")
+
+
+from aiogram.types import ChatMemberUpdated  # noqa: E402
+
+
+@router.chat_member()
+async def on_chat_member(update: ChatMemberUpdated):
+    old = update.old_chat_member.status
+    new = update.new_chat_member.status
+    if new in ("member", "administrator") and old in (None, "left", "kicked"):
+        text = await db.get_welcome(update.chat.id)
+        if text:
+            user = update.new_chat_member.user
+            nama = (user.first_name or user.full_name or "Member") if user else "Member"
+            try:
+                await update.bot.send_message(
+                    update.chat.id, text.replace("{nama}", nama))
+            except Exception:
+                pass
+
+
+# ---------------------------------------------------------------------------
+# Pengingat pribadi
+# ---------------------------------------------------------------------------
+def _parse_duration(arg: str) -> tuple[float, str] | None:
+    """'5m', '5 menit', '1h', '2 jam', '1d' -> (detik, label)"""
+    import re as _re
+    m = _re.match(r"^\s*(\d+)\s*(m|menit|min|menit|h|jam|d|hari|hour)\b",
+                  arg.strip().lower())
+    if not m:
+        return None
+    n = int(m.group(1))
+    unit = m.group(2)
+    if unit in ("m", "menit", "min"):
+        secs, label = n * 60, f"{n} menit"
+    elif unit in ("h", "jam", "hour"):
+        secs, label = n * 3600, f"{n} jam"
+    else:
+        secs, label = n * 86400, f"{n} hari"
+    return secs, label
+
+
+@router.message(Command("ingat"))
+async def cmd_ingat(message: Message, state: FSMContext):
+    if state.get_state() is not None:
+        await state.clear()
+    parts = (message.text or "").split(maxsplit=2)
+    if len(parts) < 3:
+        await message.answer(
+            "⏰ Pakai: <code>/ingat 5m beli makanan</code>\n"
+            "Durasi: <b>m</b>enit, <b>j</b>am (h), <b>h</b>ari (d) — "
+            "contoh: <code>/ingat 30m</code>, <code>/ingat 2j</code>, <code>/ingat 1d</code>")
+        return
+    dur = _parse_duration(parts[1])
+    if not dur:
+        await message.answer("Durasi tidak valid. Contoh: <code>/ingat 5m pesan</code>")
+        return
+    secs, label = dur
+    text = parts[2].strip()
+    import time as _t
+    rid = await db.add_reminder(message.chat.id, message.from_user.id,
+                                _t.time() + secs, text)
+    await message.answer(f"⏰ Oke! Aku akan ingatkanmu <b>{label}</b> lagi:\n\n{text}\n\n"
+                         f"(ID pengingat: {rid})")
+
+
+@router.message(Command("daftaringat"))
+async def cmd_daftaringat(message: Message):
+    rows = await db.get_reminders(message.chat.id)
+    if not rows:
+        await message.answer("Belum ada pengingat aktif.")
+        return
+    import time as _t
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    lines = []
+    for r in rows[:20]:
+        left = int(r["due_ts"] - _t.time())
+        dt = datetime.fromtimestamp(r["due_ts"], ZoneInfo("Asia/Jakarta"))
+        lines.append(f"• <code>#{r['id']}</code> {dt.strftime('%H:%M %d/%m')} "
+                     f"({left//60}m lagi) — {r['text'][:80]}")
+    await message.answer("📋 <b>Pengingat aktif</b>\n\n" + "\n".join(lines))
+
+
+@router.message(Command("hapusingat"))
+async def cmd_hapusingat(message: Message):
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip().lstrip("#").isdigit():
+        await message.answer("Pakai: <code>/hapusingat 1</code> "
+                             "(lihat /daftaringat)")
+        return
+    rid = int(parts[1].strip().lstrip("#"))
+    await db.remove_reminder(rid)
+    await message.answer(f"✅ Pengingat #{rid} dihapus.")
+
+
+# ---------------------------------------------------------------------------
+# Broadcast ke semua channel (admin)
+# ---------------------------------------------------------------------------
+@router.message(Command("bcchannel"))
+async def cmd_bcchannel(message: Message):
+    if not await is_admin(message.from_user.id):
+        await message.answer("❌ Khusus owner bot.")
+        return
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        await message.answer("Pakai: <code>/bcchannel pesan kamu</code> — "
+                             "dikirim ke SEMUA channel/grup yang dibuat bot.")
+        return
+    text = parts[1].strip()
+    channels = await db.get_channels()
+    ok, fail = 0, 0
+    for c in channels:
+        if not c.get("tg_id"):
+            continue
+        try:
+            await message.bot.send_message(c["tg_id"], text)
+            ok += 1
+        except Exception:
+            fail += 1
+    await message.answer(
+        f"📢 Broadcast channel selesai: ✅ {ok} sukses, ❌ {fail} gagal "
+        "(bot harus masih admin/creator di sana).")
+
+
+# ---------------------------------------------------------------------------
 # Menu callbacks
 # ---------------------------------------------------------------------------
 @router.callback_query(F.data == "main")

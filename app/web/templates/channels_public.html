@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Channel & Grup — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>📺 Channel & Grup</h1>
+  <p>Daftar channel dan grup yang dibuat lewat PallBot. Cari & join sekarang!</p>
+</div>
+
+<div class="card tool-card">
+  <div class="tool-row">
+    <input id="ch-search" type="text" placeholder="🔍 Cari nama channel/grup..." />
+  </div>
+</div>
+
+<div id="ch-grid" class="ch-grid"></div>
+<div id="ch-empty" class="card" style="display:none">
+  <p class="muted">Belum ada channel/grup. Buat lewat bot Telegram atau
+  <a href="/admin/buat">Panel Admin</a>.</p>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function loadChannels() {
+  const r = await fetch('/api/channels/public');
+  const d = await r.json();
+  const grid = document.getElementById('ch-grid');
+  const empty = document.getElementById('ch-empty');
+  if (!d.ok || !d.channels.length) { empty.style.display = 'block'; return; }
+  grid.innerHTML = d.channels.map(c => {
+    const qr = c.link ? 'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=' + encodeURIComponent(c.link) : '';
+    return '<div class="card ch-item" data-name="' + c.name.toLowerCase() + '">' +
+      '<div class="ch-item-qr">' + (qr ? '<img loading="lazy" src="' + qr + '" alt="QR" onerror="this.style.display=\'none\'">' : '<span class="muted">tanpa link</span>') + '</div>' +
+      '<div class="ch-item-info">' +
+        '<div class="ch-item-name">📛 ' + c.name + ' <span class="ch-type">' + c.type + '</span></div>' +
+        '<div class="muted" style="font-size:.85rem">' + (c.owner ? '👑 ' + c.owner : '') + '</div>' +
+        (c.link ? '<a class="btn btn-small btn-primary" style="margin-top:10px" href="' + c.link + '" target="_blank">🚀 Join Sekarang</a>' : '') +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+document.getElementById('ch-search').addEventListener('input', e => {
+  const q = e.target.value.toLowerCase();
+  document.querySelectorAll('.ch-item').forEach(el => {
+    el.style.display = el.dataset.name.includes(q) ? '' : 'none';
+  });
+});
+loadChannels();
+</script>
+{% endblock %}

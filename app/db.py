@@ -51,6 +51,19 @@ CREATE TABLE IF NOT EXISTS logs (
     source TEXT,
     message TEXT
 );
+CREATE TABLE IF NOT EXISTS reminders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id INTEGER NOT NULL,
+    tg_id INTEGER,
+    due_ts REAL NOT NULL,
+    text TEXT NOT NULL,
+    done INTEGER DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS welcome (
+    chat_id INTEGER PRIMARY KEY,
+    text TEXT NOT NULL,
+    updated REAL
+);
 CREATE INDEX IF NOT EXISTS idx_ai_user ON ai_messages(user_key, id);
 """
 
@@ -164,6 +177,49 @@ class DB:
 
     async def get_logs(self, limit: int = 50) -> list[dict]:
         return await self.query("SELECT * FROM logs ORDER BY id DESC LIMIT ?", (limit,))
+
+    # ------------------------- reminders ------------------------------------
+    async def add_reminder(self, chat_id: int, tg_id: int, due_ts: float, text: str) -> int:
+        return await self.execute(
+            "INSERT INTO reminders(chat_id, tg_id, due_ts, text) VALUES(?,?,?,?)",
+            (int(chat_id), tg_id or 0, due_ts, text),
+        )
+
+    async def get_due_reminders(self, now: float) -> list[dict]:
+        return await self.query(
+            "SELECT * FROM reminders WHERE done=0 AND due_ts<=?", (now,)
+        )
+
+    async def done_reminder(self, rid: int):
+        await self.execute("UPDATE reminders SET done=1 WHERE id=?", (int(rid),))
+
+    async def remove_reminder(self, rid: int):
+        await self.execute("DELETE FROM reminders WHERE id=?", (int(rid),))
+
+    async def get_reminders(self, chat_id: int = None) -> list[dict]:
+        if chat_id is None:
+            return await self.query(
+                "SELECT * FROM reminders WHERE done=0 ORDER BY due_ts"
+            )
+        return await self.query(
+            "SELECT * FROM reminders WHERE done=0 AND chat_id=? ORDER BY due_ts",
+            (int(chat_id),),
+        )
+
+    # ------------------------- welcome ---------------------------------------
+    async def set_welcome(self, chat_id: int, text: str):
+        await self.execute(
+            "INSERT INTO welcome(chat_id, text, updated) VALUES(?,?,?) "
+            "ON CONFLICT(chat_id) DO UPDATE SET text=excluded.text, updated=excluded.updated",
+            (int(chat_id), text, time.time()),
+        )
+
+    async def get_welcome(self, chat_id: int) -> str | None:
+        row = await self.query_one("SELECT text FROM welcome WHERE chat_id=?", (int(chat_id),))
+        return row["text"] if row else None
+
+    async def del_welcome(self, chat_id: int):
+        await self.execute("DELETE FROM welcome WHERE chat_id=?", (int(chat_id),))
 
 
 db = DB()

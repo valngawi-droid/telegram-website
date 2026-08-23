@@ -4,11 +4,16 @@
 {% block admin %}
 <div class="stat-grid">
   <div class="card stat">
-    <div class="stat-label">Status Bot</div>
-    <div class="stat-val {% if status.bot_online %}ok{% else %}bad{% endif %}">
+    <div class="stat-label">Status Bot <span class="live-dot" title="auto refresh 10 dtk"></span></div>
+    <div class="stat-val live-bot {% if status.bot_online %}ok{% else %}bad{% endif %}">
       {% if status.bot_online %}🟢 Online{% else %}🔴 Offline{% endif %}
     </div>
-    <div class="stat-sub">@{{ status.bot_username or 'belum set token' }}</div>
+    <div class="stat-sub live-botsub">@{{ status.bot_username or 'belum set token' }}</div>
+  </div>
+  <div class="card stat">
+    <div class="stat-label">Uptime Server</div>
+    <div class="stat-val live-uptime">—</div>
+    <div class="stat-sub">sejak restart terakhir</div>
   </div>
   <div class="card stat">
     <div class="stat-label">MTProto (Buat Channel)</div>
@@ -19,12 +24,12 @@
   </div>
   <div class="card stat">
     <div class="stat-label">User Terdaftar</div>
-    <div class="stat-val">{{ counts.users }}</div>
+    <div class="stat-val live-users">{{ counts.users }}</div>
     <div class="stat-sub">pernah pakai bot</div>
   </div>
   <div class="card stat">
     <div class="stat-label">Channel/Grup Dibuat</div>
-    <div class="stat-val">{{ counts.channels }}</div>
+    <div class="stat-val live-chs">{{ counts.channels }}</div>
     <div class="stat-sub">oleh bot & website</div>
   </div>
 </div>
@@ -110,5 +115,29 @@ async function doBroadcast() {
     box.innerHTML = '<span class="err">' + (d.message || 'Gagal') + '</span>';
   }
 }
+// live refresh status (setiap 10 detik)
+async function refreshStatus() {
+  try {
+    const r = await fetch('/api/health');
+    const d = await r.json();
+    if (!d.ok) return;
+    const bot = d.bot;
+    const b = document.querySelector('.live-bot');
+    const bs = document.querySelector('.live-botsub');
+    if (b) {
+      b.textContent = bot.bot_online ? '🟢 Online' : '🔴 Offline';
+      b.className = 'stat-val live-bot ' + (bot.bot_online ? 'ok' : 'bad');
+    }
+    if (bs) bs.textContent = '@' + (bot.bot_username || 'belum set token');
+    const u = document.querySelector('.live-uptime');
+    if (u && d.uptime_str) u.textContent = d.uptime_str;
+    const us = document.querySelector('.live-users');
+    if (us) us.textContent = d.counts.users;
+    const ch = document.querySelector('.live-chs');
+    if (ch) ch.textContent = d.counts.channels;
+  } catch (e) {}
+}
+refreshStatus();
+setInterval(refreshStatus, 10000);
 </script>
 {% endblock %}

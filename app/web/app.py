@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -64,6 +65,33 @@ async def _sync_loop():
         await asyncio.sleep(15)
 
 
+APP_STARTED_AT = time.time()
+
+
+async def _reminder_loop():
+    """Kirim pengingat (/ingat) yang sudah jatuh tempo."""
+    import time as _t
+    while True:
+        try:
+            bot = bot_manager.bot
+            if bot is not None and appstate.bot_online:
+                for r in await db.get_due_reminders(_t.time()):
+                    try:
+                        await bot.send_message(
+                            r["chat_id"],
+                            f"⏰ <b>Pengingat:</b>\n\n{r['text']}",
+                            parse_mode="HTML",
+                        )
+                    except Exception:
+                        pass
+                    await db.done_reminder(r["id"])
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            pass
+        await asyncio.sleep(20)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from ..config import PRESET_OWNERS
@@ -77,8 +105,10 @@ async def lifespan(app: FastAPI):
             _mtproto_sig = f"{cfg.get('API_ID')}|{cfg.get('API_HASH')}|{token}"
             asyncio.create_task(services.start_mtproto(cfg))
     task = asyncio.create_task(_sync_loop())
+    rem_task = asyncio.create_task(_reminder_loop())
     yield
     task.cancel()
+    rem_task.cancel()
     await bot_manager.stop()
     await services.stop_mtproto()
     await db.close()
@@ -104,6 +134,7 @@ class CreateIn(BaseModel):
     type: str  # channel | group
     about: str = ""
     owner_tg_id: int
+    username: str = ""  # optional: username publik @...
 
 
 class JoinIn(BaseModel):
@@ -179,6 +210,12 @@ async def page_login(request: Request, error: str = ""):
     return _page(request, "login.html", error=error)
 
 
+@app.get("/channels", response_class=HTMLResponse)
+async def page_channels_public(request: Request):
+    return _page(request, "channels_public.html",
+                 bot_online=appstate.bot_online)
+
+
 # ---------------------------------------------------------------------------
 # Halaman admin
 # ---------------------------------------------------------------------------
@@ -238,12 +275,34 @@ async def page_logout(request: Request):
 # ---------------------------------------------------------------------------
 @app.get("/api/health")
 async def api_health():
+    up = int(time.time() - APP_STARTED_AT)
     return {
         "ok": True,
         "app": "PallBot",
+        "uptime": up,
+        "uptime_str": (
+            f"{up // 3600}j {(up % 3600) // 60}m" if up >= 3600 else f"{up // 60}m {up % 60}s"
+        ),
         "bot": _public_status(),
         "counts": await _counts(),
     }
+
+
+@app.get("/api/channels/public")
+async def api_channels_public():
+    """Daftar channel/grup untuk halaman publik (tanpa data sensitif)."""
+    channels = await db.get_channels()
+    out = []
+    for c in channels:
+        link = f"https://t.me/{c['username']}" if c.get("username") else (c.get("invite") or "")
+        out.append({
+            "name": c["name"],
+            "type": c["type"],
+            "owner": c.get("owner_label") or "",
+            "link": link,
+            "created_at": c.get("created_at"),
+        })
+    return {"ok": True, "channels": out}
 
 
 @app.get("/api/status")
@@ -338,6 +397,17 @@ async def api_create(data: CreateIn, request: Request):
         about=(data.about or "").strip()[:500],
         source="website",
     )
+    username_out = result.get("username", "")
+    # set username publik (opsional)
+    if result.get("ok") and data.username.strip():
+        u = await services.set_username(result.get("tg_id"), data.username)
+        if u.get("ok"):
+            username_out = u["username"]
+            result["username"] = username_out
+            result["invite"] = f"https://t.me/{username_out}"
+        else:
+            result["message"] = (result.get("message", "") +
+                                 f" Username publik gagal: {u.get('message')}").strip()
     if result.get("ok"):
         owners = {o["tg_id"]: o["label"] for o in await db.get_owners()}
         label = owners.get(result["owner_tg_id"], str(result["owner_tg_id"]))
@@ -345,7 +415,7 @@ async def api_create(data: CreateIn, request: Request):
             name=result.get("name", data.name),
             ctype=data.type,
             tg_id=result.get("tg_id"),
-            username=result.get("username", ""),
+            username=username_out,
             invite=result.get("invite", ""),
             owner_tg_id=result["owner_tg_id"],
             owner_label=label,

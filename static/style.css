@@ -384,3 +384,47 @@ input:focus, select:focus, textarea:focus {
 /* ---------- PWA ---------- */
 @keyframes fadein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 main.container { animation: fadein .35s ease; }
+
+/* ============ v3: chips, channel showroom, live ============ */
+.chat-chips {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  padding: 4px 6px 12px;
+}
+.chip {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: .82rem;
+  cursor: pointer;
+  transition: all .12s;
+}
+.chip:hover { border-color: var(--accent); color: var(--text); }
+
+.ch-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+.ch-item { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 0; }
+.ch-item-qr { flex: 0 0 96px; text-align: center; }
+.ch-item-qr img {
+  width: 96px; height: 96px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #fff;
+  padding: 4px;
+}
+.ch-item-info { flex: 1; min-width: 0; }
+.ch-item-name { font-size: 1rem; margin-bottom: 6px; word-break: break-word; }
+@media (max-width: 560px) {
+  .ch-grid { grid-template-columns: 1fr; }
+  .ch-item { flex-direction: column-reverse; align-items: center; text-align: center; }
+}
+
+.live-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--ok); margin-left: 6px;
+  animation: pulse 2s infinite;
+}
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }

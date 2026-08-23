@@ -1,5 +1,5 @@
 /* PallBot Service Worker — cache app shell untuk mode offline / feel aplikasi */
-const CACHE = 'pallbot-v2';
+const CACHE = 'pallbot-v3';
 const ASSETS = [
   '/static/style.css',
   '/static/app.js',
