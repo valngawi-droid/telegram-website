@@ -6,6 +6,10 @@
   <p>Ngobrol dengan AI. Riwayat percakapan disimpan per perangkat.</p>
 </div>
 
+<div class="chat-top">
+  <span class="muted">🤖 AI TELEGRAM — riwayat per perangkat</span>
+  <button class="btn btn-small" onclick="clearChat()">🧹 Hapus Percakapan</button>
+</div>
 <div class="chat-card card">
   <div id="chat-log" class="chat-log">
     <div class="msg bot">
@@ -60,5 +64,14 @@ async function send() {
 }
 document.getElementById('chat-send').onclick = send;
 input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+
+async function clearChat() {
+  if (!confirm('Hapus semua riwayat percakapan AI di perangkat ini?')) return;
+  await fetch('/api/ai/clear', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({user_key: userKey})
+  });
+  log.innerHTML = '<div class="msg bot"><div class="bubble">Riwayat dihapus. Mulai chat baru! 👋</div></div>';
+}
 </script>
 {% endblock %}

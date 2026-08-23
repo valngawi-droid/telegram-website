@@ -194,11 +194,13 @@ async def page_dashboard(request: Request):
         return RedirectResponse("/admin/login", status_code=302)
     cfg = await _cfg()
     logs = await db.get_logs(30)
+    users = await db.get_users()
+    users.sort(key=lambda u: u.get("last_used") or 0, reverse=True)
     return _page(request, "dashboard.html",
                  status=_public_status(), counts=await _counts(),
                  ai_provider=cfg.get("AI_PROVIDER"),
                  ai_model=cfg.get("AI_MODEL") or cfg.get("AI_OPENAI_MODEL"),
-                 logs=logs)
+                 logs=logs, users=users)
 
 
 @app.get("/admin/buat", response_class=HTMLResponse)
@@ -388,6 +390,95 @@ async def api_ai_test(request: Request):
         return {"ok": False, "message": str(e)}
     except Exception as e:
         return {"ok": False, "message": f"Error koneksi: {e}"}
+
+
+class AIKeyIn(BaseModel):
+    user_key: str = "web"
+
+
+@app.post("/api/ai/clear")
+async def api_ai_clear(data: AIKeyIn):
+    user_key = (data.user_key or "web")[:64] or "web"
+    await db.clear_ai_history(user_key)
+    return {"ok": True}
+
+
+@app.get("/api/users")
+async def api_users(request: Request):
+    await _admin_guard(request)
+    users = await db.get_users()
+    users.sort(key=lambda u: u.get("last_used") or 0, reverse=True)
+    return {"ok": True, "users": users}
+
+
+class BroadcastIn(BaseModel):
+    text: str
+
+
+@app.post("/api/broadcast")
+async def api_broadcast(data: BroadcastIn, request: Request):
+    await _admin_guard(request)
+    text = (data.text or "").strip()
+    if not text:
+        raise HTTPException(400, "teks kosong")
+    if not appstate.bot_online or not bot_manager.bot:
+        return {"ok": False, "message": "Bot offline — broadcast tidak bisa dikirim"}
+    users = await db.get_users()
+    res = await services.broadcast(bot_manager.bot, users, text)
+    return {"ok": True, **res}
+
+
+class EditChIn(BaseModel):
+    name: str | None = None
+    about: str | None = None
+
+
+@app.post("/api/channels/{cid}/edit")
+async def api_ch_edit(cid: int, data: EditChIn, request: Request):
+    await _admin_guard(request)
+    row = await db.query_one("SELECT * FROM channels WHERE id=?", (int(cid),))
+    if not row:
+        raise HTTPException(404, "channel tidak ditemukan")
+    result = await services.edit_entity(row["tg_id"], name=data.name, about=data.about)
+    if result.get("ok"):
+        if data.name and data.name.strip():
+            await db.execute("UPDATE channels SET name=? WHERE id=?",
+                             (data.name.strip(), int(cid)))
+    return result
+
+
+@app.post("/api/channels/{cid}/invite")
+async def api_ch_invite(cid: int, request: Request):
+    await _admin_guard(request)
+    row = await db.query_one("SELECT * FROM channels WHERE id=?", (int(cid),))
+    if not row:
+        raise HTTPException(404, "channel tidak ditemukan")
+    result = await services.new_invite(row["tg_id"])
+    if result.get("ok") and result.get("invite"):
+        await db.execute("UPDATE channels SET invite=? WHERE id=?",
+                         (result["invite"], int(cid)))
+    return result
+
+
+@app.post("/api/channels/{cid}/detail")
+async def api_ch_detail(cid: int, request: Request):
+    await _admin_guard(request)
+    row = await db.query_one("SELECT * FROM channels WHERE id=?", (int(cid),))
+    if not row:
+        raise HTTPException(404, "channel tidak ditemukan")
+    return await services.channel_detail(row["tg_id"])
+
+
+@app.delete("/api/channels/{cid}/tg")
+async def api_ch_delete_tg(cid: int, request: Request):
+    await _admin_guard(request)
+    row = await db.query_one("SELECT * FROM channels WHERE id=?", (int(cid),))
+    if not row:
+        raise HTTPException(404, "channel tidak ditemukan")
+    result = await services.delete_entity(row["tg_id"])
+    if result.get("ok"):
+        await db.remove_channel(cid)
+    return result
 
 
 @app.post("/api/settings")

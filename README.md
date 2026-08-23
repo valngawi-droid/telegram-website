@@ -29,11 +29,19 @@ Bot Telegram (aiogram 3)      Website (FastAPI + Jinja2)
 | Buat **grup** (super) baru | ✅ | ✅ |
 | **Pilih owner** saat membuat (Pall utama / akun 2 / pacar, atau ID custom) | ✅ | ✅ |
 | Tambah bot ke channel/grup (invite link → bot join otomatis) | ✅ | ✅ |
-| **AI Chat** (AI TELEGRAM) | ✅ | ✅ |
+| **AI Chat** (AI TELEGRAM) + `/ai <teks>` quick command | ✅ | ✅ |
+| **Edit channel** yang dibuat (nama, deskripsi) | ✅ (admin) | ✅ |
+| **Invite link baru** untuk channel | ✅ (admin) | ✅ |
+| **Detail channel** (jumlah member, admin) | ✅ (admin) | ✅ |
+| **Hapus channel di Telegram** (permanen, 2x konfirmasi) | ✅ (admin) | ✅ |
+| Broadcast ke semua user | ✅ (admin) | ✅ |
+| List user terdaftar + terakhir aktif | ✅ (statistik) | ✅ |
+| `/ping` cek respons bot | ✅ | — |
 | Statistik & log | ✅ (admin) | ✅ |
 | Kelola daftar owner | ✅ (admin) | ✅ |
-| Broadcast ke semua user | ✅ (admin) | — |
 | Ubah token / API / AI config tanpa edit file | — | ✅ |
+| **PWA — install sebagai aplikasi di HP** (offline, ikon, shortcut) | — | ✅ |
+| Banner, logo & loading screen animasi | — | ✅ |
 
 **Owner default (admin bot & pilihan owner):**
 
@@ -139,10 +147,29 @@ Kirim `/start` ke bot → muncul **menu tombol**:
    → bot membuat + menunjuk owner → dapat link/ID.
 4. **📢 Tambah Bot** → kirim invite link channel/grup, bot langsung join.
 5. **ℹ️ Info** → tentang bot.
-6. **⚙️ Admin** (hanya 3 owner) → statistik, tes AI, tambah/list owner,
-   daftar channel, broadcast.
+6. **⚙️ Admin** (hanya 3 owner) → statistik, tes AI, **edit channel**
+   (ubah nama/deskripsi, invite baru, detail member, hapus channel),
+   tambah/list owner, daftar channel, broadcast.
 
-Komando: `/start` `/menu` `/help` `/id`
+Komando: `/start` `/menu` `/help` `/id` `/ping` `/ai <pertanyaan>`
+
+## 📱 Website → Aplikasi (PWA)
+
+Website sudah **PWA (Progressive Web App)** — bisa di-install jadi aplikasi
+di HP tanpa Play Store / App Store:
+
+- **Android (Chrome):** buka website → menu ⋮ → **"Tambah ke layar utama" /
+  "Install aplikasi"** → muncul ikon PallBot di home screen, jalan
+  fullscreen seperti aplikasi asli, **offline** untuk halaman & aset.
+- **iPhone (Safari):** buka website → tombol Share → **"Tamb. ke Layar Utama"**.
+
+Shortcut aplikasi: **Cek ID**, **AI Chat**, **Panel Admin**.
+Icon aplikasi di `static/icons/` (bisa diganti: ganti 3 file PNG, lalu
+bump version `CACHE` di `static/sw.js`).
+
+> Untuk convert ke APK beneran (jika mau), gunakan **PWABuilder.com**
+> (paste URL website → generate APK) atau **Capacitor** — karena PWA-nya
+> sudah lengkap, konversinya tinggal wrap.
 
 ## 🤖 Konfigurasi AI
 

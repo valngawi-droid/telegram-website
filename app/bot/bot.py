@@ -73,6 +73,11 @@ class AIMode(StatesGroup):
     on = State()
 
 
+class EditChannel(StatesGroup):
+    wait_name = State()
+    wait_about = State()
+
+
 AI_RATE = 30          # pesan per jendela
 AI_WINDOW = 600       # detik
 _rate: dict[int, list[float]] = {}
@@ -207,6 +212,51 @@ async def cmd_help(message: Message):
         "Ketik /start untuk kembali ke menu.",
         parse_mode=ParseMode.HTML,
     )
+
+
+@router.message(Command("ping"))
+async def cmd_ping(message: Message):
+    t0 = time.time()
+    await message.answer(" Pong!")
+    ms = int((time.time() - t0) * 1000)
+    await message.answer(f"⚡ Bot online, respons: <b>{ms} ms</b>", parse_mode=ParseMode.HTML)
+
+
+@router.message(Command("ai"))
+async def cmd_ai(message: Message, state: FSMContext):
+    """/ai <teks> — tanya AI langsung tanpa masuk mode AI."""
+    text = (message.text or "").split(maxsplit=1)
+    if len(text) < 2 or not text[1].strip():
+        await message.answer(
+            "🤖 Pakai: <code>/ai pertanyaan kamu</code>\n"
+            "atau tekan tombol 🤖 AI Chat di menu /start untuk ngobrol santai.",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+    q = text[1].strip()
+    u = message.from_user
+    user_key = f"tg:{u.id}"
+    if not _ai_ok(u.id):
+        await message.answer("🚦 Terlalu banyak pesan. Tunggu beberapa menit.")
+        return
+    history = await db.get_ai_history(user_key, limit=10)
+    messages = [{"role": m["role"], "content": m["content"]} for m in history]
+    messages.append({"role": "user", "content": q})
+    await message.answer("⏳ AI sedang berpikir...")
+    await db.add_ai_message(user_key, "user", q)
+    try:
+        reply = await ai_chat(await services.get_cfg(), messages)
+        is_error = False
+    except AIError as e:
+        reply = f"❌ <b>AI error</b>: {e}"
+        is_error = True
+    except Exception as e:
+        reply = f"❌ <b>Gagal terhubung ke AI</b>: {e}"
+        is_error = True
+    if not is_error:
+        await db.add_ai_message(user_key, "assistant", reply)
+    for part in _chunk(reply):
+        await message.answer(part)
 
 
 @router.message(Command("id"))
@@ -444,6 +494,7 @@ def _format_result(r: dict, owner_label: str = "") -> str:
 def admin_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [B("📊 Statistik", "admin_stats"), B("🤖 Tes AI", "admin_aitest")],
+        [B("✏️ Edit Channel", "admin_editch"), B("👁️ Detail Channel", "admin_chdetail")],
         [B("➕ Tambah Owner", "admin_addowner"), B("📋 Daftar Owner", "admin_ownerlist")],
         [B("📋 Daftar Channel", "admin_channellist")],
         [B("📢 Broadcast", "admin_broadcast")],
@@ -542,6 +593,239 @@ async def cb_admin_broadcast(cq: CallbackQuery, state: FSMContext):
     await state.set_state(Broadcast.wait)
     await cq.message.answer("📢 Kirim <b>teks broadcast</b> (dikirim ke semua user):")
     cq.answer()
+
+
+# ---------------------------------------------------------------------------
+# Edit / kelola channel (admin)
+# ---------------------------------------------------------------------------
+async def _channel_by_dbid(dbid: int) -> dict | None:
+    return await db.query_one("SELECT * FROM channels WHERE id=?", (int(dbid),))
+
+
+async def _ch_pick_kb(cq: CallbackQuery, title: str, prefix: str):
+    channels = await db.get_channels()
+    if not channels:
+        await cq.message.edit_text(
+            "📋 Belum ada channel/grup yang dibuat.\nBuat dulu di menu ➕ atau di website.",
+            reply_markup=admin_kb(),
+        )
+        cq.answer()
+        return None
+    rows = [[B(f"📛 {c['name']} ({c['type']})", f"{prefix}{c['id']}")] for c in channels[:20]]
+    rows.append([B("↩️ Panel Admin", "menu_admin")])
+    await cq.message.edit_text(title, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+    cq.answer()
+    return channels
+
+
+def _ch_actions_kb(dbid: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [B("✏️ Ubah Nama", f"editch_name:{dbid}"), B("📝 Ubah Deskripsi", f"editch_about:{dbid}")],
+        [B("🔗 Invite Link Baru", f"editch_invite:{dbid}"), B("👁️ Detail & Member", f"editch_detail:{dbid}")],
+        [B("🗑️ Hapus di Telegram", f"editch_del:{dbid}")],
+        [B("↩️ Pilih Channel Lain", "admin_editch"), B("↩️ Panel Admin", "menu_admin")],
+    ])
+
+
+@router.callback_query(F.data == "admin_editch")
+async def cb_admin_editch(cq: CallbackQuery, state: FSMContext):
+    if not await is_admin(cq.from_user.id):
+        cq.answer("❌ Khusus owner bot", show_alert=True)
+        return
+    await state.clear()
+    await _ch_pick_kb(cq, "✏️ <b>Edit Channel</b> — pilih channel/grup:", "editch_pick:")
+    cq.answer()
+
+
+@router.callback_query(F.data == "admin_chdetail")
+async def cb_admin_chdetail(cq: CallbackQuery, state: FSMContext):
+    if not await is_admin(cq.from_user.id):
+        cq.answer("❌ Khusus owner bot", show_alert=True)
+        return
+    await state.clear()
+    await _ch_pick_kb(cq, "👁️ <b>Detail Channel</b> — pilih channel/grup:", "chdetail_pick:")
+    cq.answer()
+
+
+@router.callback_query(F.data.startswith("editch_pick:"))
+async def cb_editch_pick(cq: CallbackQuery):
+    dbid = int(cq.data.split(":", 1)[1])
+    row = await _channel_by_dbid(dbid)
+    if not row:
+        cq.answer("Channel tidak ditemukan", show_alert=True)
+        return
+    await cq.message.edit_text(
+        f"📛 <b>{row['name']}</b> ({row['type']})\nID: <code>{row['tg_id']}</code>\n"
+        f"Owner: {row.get('owner_label') or row.get('owner_tg_id')}\n\nPilih aksi:",
+        parse_mode=ParseMode.HTML,
+        reply_markup=_ch_actions_kb(dbid),
+    )
+    cq.answer()
+
+
+@router.callback_query(F.data.startswith("chdetail_pick:"))
+async def cb_chdetail_pick(cq: CallbackQuery):
+    dbid = int(cq.data.split(":", 1)[1])
+    row = await _channel_by_dbid(dbid)
+    if not row:
+        cq.answer("Channel tidak ditemukan", show_alert=True)
+        return
+    await cq.message.answer("⏳ Mengambil detail...")
+    d = await services.channel_detail(row["tg_id"])
+    if not d.get("ok"):
+        await cq.message.answer(d.get("message", "Gagal"))
+    else:
+        link = f"https://t.me/{d['username']}" if d.get("username") else "-"
+        txt = (
+            "👁️ <b>Detail Channel/Grup</b>\n\n"
+            f"📛 Nama: {d['title']}\n"
+            f"👥 Member: <b>{d['participants_count']:,}</b>\n"
+            f"🛡️ Admin: {d.get('admin_count', 0)}\n"
+            f"🔗 Link: {link}\n"
+            f"🆔 ID: <code>{row['tg_id']}</code>"
+            + (f"\n\n📝 {d['about']}" if d.get("about") else "")
+        )
+        await cq.message.answer(txt, parse_mode=ParseMode.HTML)
+    cq.answer()
+
+
+@router.callback_query(F.data.startswith("editch_name:"))
+async def cb_editch_name(cq: CallbackQuery, state: FSMContext):
+    dbid = int(cq.data.split(":", 1)[1])
+    row = await _channel_by_dbid(dbid)
+    if not row:
+        cq.answer("Channel tidak ditemukan", show_alert=True)
+        return
+    await state.set_state(EditChannel.wait_name)
+    await state.update_data(dbid=dbid, tg_id=row["tg_id"], name=row["name"])
+    await cq.message.answer(f"✏️ Kirim <b>nama baru</b> untuk {row['name']}:")
+    cq.answer()
+
+
+@router.callback_query(F.data.startswith("editch_about:"))
+async def cb_editch_about(cq: CallbackQuery, state: FSMContext):
+    dbid = int(cq.data.split(":", 1)[1])
+    row = await _channel_by_dbid(dbid)
+    if not row:
+        cq.answer("Channel tidak ditemukan", show_alert=True)
+        return
+    await state.set_state(EditChannel.wait_about)
+    await state.update_data(dbid=dbid, tg_id=row["tg_id"], name=row["name"])
+    await cq.message.answer(f"📝 Kirim <b>deskripsi baru</b> untuk {row['name']} (atau /kosong untuk hapus):")
+    cq.answer()
+
+
+@router.callback_query(F.data.startswith("editch_invite:"))
+async def cb_editch_invite(cq: CallbackQuery):
+    dbid = int(cq.data.split(":", 1)[1])
+    row = await _channel_by_dbid(dbid)
+    if not row:
+        cq.answer("Channel tidak ditemukan", show_alert=True)
+        return
+    await cq.message.answer("⏳ Membuat invite link baru...")
+    r = await services.new_invite(row["tg_id"])
+    if r.get("ok") and r.get("invite"):
+        await db.execute(
+            "UPDATE channels SET invite=? WHERE id=?", (r["invite"], dbid)
+        )
+        await cq.message.answer(f"🔗 <b>Invite link baru</b>\n<code>{r['invite']}</code>",
+                                parse_mode=ParseMode.HTML)
+    else:
+        await cq.message.answer(r.get("message", "Gagal membuat invite"))
+    cq.answer()
+
+
+@router.callback_query(F.data.startswith("editch_detail:"))
+async def cb_editch_detail(cq: CallbackQuery):
+    dbid = int(cq.data.split(":", 1)[1])
+    row = await _channel_by_dbid(dbid)
+    if not row:
+        cq.answer("Channel tidak ditemukan", show_alert=True)
+        return
+    await cq.message.answer("⏳ Mengambil detail...")
+    d = await services.channel_detail(row["tg_id"])
+    if not d.get("ok"):
+        await cq.message.answer(d.get("message", "Gagal"))
+    else:
+        link = f"https://t.me/{d['username']}" if d.get("username") else "-"
+        txt = (
+            "👁️ <b>Detail Channel/Grup</b>\n\n"
+            f"📛 Nama: {d['title']}\n"
+            f"👥 Member: <b>{d['participants_count']:,}</b>\n"
+            f"🛡️ Admin: {d.get('admin_count', 0)}\n"
+            f"🔗 Link: {link}\n"
+            f"🆔 ID: <code>{row['tg_id']}</code>"
+            + (f"\n\n📝 {d['about']}" if d.get("about") else "")
+        )
+        await cq.message.answer(txt, parse_mode=ParseMode.HTML)
+    cq.answer()
+
+
+@router.callback_query(F.data.startswith("editch_del:"))
+async def cb_editch_del(cq: CallbackQuery, state: FSMContext):
+    dbid = int(cq.data.split(":", 1)[1])
+    row = await _channel_by_dbid(dbid)
+    if not row:
+        cq.answer("Channel tidak ditemukan", show_alert=True)
+        return
+    await state.clear()
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [B("💀 YA, HAPUS PERMANEN", f"editch_delc:{dbid}")],
+        [B("↩️ Batal", "menu_admin")],
+    ])
+    await cq.message.edit_text(
+        f"⚠️ <b>PERINGATAN</b>\n\n"
+        f"Channel/grup <b>{row['name']}</b> akan dihapus <b>PERMANEN</b> "
+        "dari Telegram. Semua pesan & member hilang. Tidak bisa diurungkan!",
+        parse_mode=ParseMode.HTML,
+        reply_markup=kb,
+    )
+    cq.answer()
+
+
+@router.callback_query(F.data.startswith("editch_delc:"))
+async def cb_editch_delc(cq: CallbackQuery):
+    dbid = int(cq.data.split(":", 1)[1])
+    row = await _channel_by_dbid(dbid)
+    if not row:
+        cq.answer("Channel tidak ditemukan", show_alert=True)
+        return
+    await cq.message.answer("⏳ Menghapus channel di Telegram...")
+    r = await services.delete_entity(row["tg_id"])
+    await db.remove_channel(dbid)
+    txt = r.get("message", "Selesai")
+    await cq.message.edit_text(
+        txt + "\n\nDihapus juga dari daftar.",
+        reply_markup=admin_kb(),
+    )
+    cq.answer()
+
+
+# ---------------------------------------------------------------------------
+# FSM edit channel
+# ---------------------------------------------------------------------------
+@router.message(EditChannel.wait_name)
+async def fsm_editch_name(message: Message, state: FSMContext):
+    data = await state.get_data()
+    await state.clear()
+    name = (message.text or "").strip()
+    if len(name) < 2:
+        await message.answer("Nama terlalu pendek. /menu untuk kembali.")
+        return
+    r = await services.edit_entity(data["tg_id"], name=name)
+    await db.execute("UPDATE channels SET name=? WHERE id=?", (name, data["dbid"]))
+    await message.answer(r.get("message", "Selesai"))
+
+
+@router.message(EditChannel.wait_about)
+async def fsm_editch_about(message: Message, state: FSMContext):
+    data = await state.get_data()
+    await state.clear()
+    txt = (message.text or "").strip()
+    if txt.lower() in ("/kosong", "kosong", "/skip", "-"):
+        txt = ""
+    r = await services.edit_entity(data["tg_id"], about=txt)
+    await message.answer(r.get("message", "Selesai"))
 
 
 # ---------------------------------------------------------------------------
@@ -795,20 +1079,20 @@ class BotManager:
         try:
             await self.bot.delete_webhook(drop_pending_updates=True)
             me = await self.bot.get_me()
-            state.bot_online = True
-            state.bot_id = me.id
-            state.bot_username = me.username or ""
+            appstate.bot_online = True
+            appstate.bot_id = me.id
+            appstate.bot_username = me.username or ""
             await db.log("info", "bot", f"Bot online: @{me.username} (id={me.id})")
             await dp.start_polling(self.bot)
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            state.bot_online = False
-            state.last_error = str(e)
+            appstate.bot_online = False
+            appstate.last_error = str(e)
             await db.log("error", "bot", f"Polling error: {e}")
             log.exception("bot polling error")
         finally:
-            state.bot_online = False
+            appstate.bot_online = False
 
     async def stop(self):
         if self.task:
@@ -824,7 +1108,7 @@ class BotManager:
             except Exception:
                 pass
             self.bot = None
-        state.bot_online = False
+        appstate.bot_online = False
 
     async def restart_if_changed(self, token: str):
         """Dipanggil berkala dari website — restart kalau token berubah."""

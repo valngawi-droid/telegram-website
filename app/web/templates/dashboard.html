@@ -41,6 +41,34 @@
 </div>
 
 <div class="card">
+  <div class="card-head"><h3>📢 Broadcast ke Semua User</h3></div>
+  <p class="muted">Kirim pesan ke semua user yang pernah memakai bot (butuh bot online).</p>
+  <textarea id="bc-text" rows="3" placeholder="Tulis pesan broadcast..."></textarea>
+  <div class="btn-row" style="margin-top:12px">
+    <button class="btn btn-primary" onclick="doBroadcast()">📢 Kirim Broadcast</button>
+  </div>
+  <div id="bc-result" class="result-box"></div>
+</div>
+
+<div class="card">
+  <div class="card-head"><h3>👥 User Terdaftar ({{ counts.users }})</h3></div>
+  {% if users %}
+  <table class="table">
+    <thead><tr><th>Nama</th><th>Username</th><th>Terakhir Aktif</th></tr></thead>
+    <tbody>
+      {% for u in users[:15] %}
+      <tr>
+        <td><b>{{ u.first_name or 'User' }}</b> <span class="muted mono">{{ u.tg_id }}</span></td>
+        <td>{% if u.username %}@{{ u.username }}{% else %}-{% endif %}</td>
+        <td>{{ u.last_used|ts }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">Belum ada user. Tambah bot di Telegram & kirim /start.</p>{% endif %}
+</div>
+
+<div class="card">
   <div class="card-head"><h3>📜 Log Terbaru</h3><a href="/admin/pengaturan" class="link">Pengaturan →</a></div>
   {% if logs %}
   <div class="log-table">
@@ -64,6 +92,23 @@ async function testAi() {
   const r = await fetch('/api/ai/test', {method: 'POST'});
   const d = await r.json();
   box.innerHTML = '<span class="' + (d.ok ? 'ok' : 'err') + '">' + d.message + '</span>';
+}
+async function doBroadcast() {
+  const text = document.getElementById('bc-text').value.trim();
+  const box = document.getElementById('bc-result');
+  if (!text) { box.innerHTML = '<span class="err">Tulis pesan dulu</span>'; return; }
+  box.innerHTML = '⏳ Mengirim broadcast...';
+  const r = await fetch('/api/broadcast', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({text})
+  });
+  const d = await r.json();
+  if (d.ok) {
+    box.innerHTML = '<span class="ok">✅ Broadcast terkirim: ' + d.sent + ' user (' + d.failed + ' gagal)</span>';
+    document.getElementById('bc-text').value = '';
+  } else {
+    box.innerHTML = '<span class="err">' + (d.message || 'Gagal') + '</span>';
+  }
 }
 </script>
 {% endblock %}
