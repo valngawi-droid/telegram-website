@@ -11,6 +11,13 @@
     <div class="stat-sub live-botsub">@{{ status.bot_username or 'belum set token' }}</div>
   </div>
   <div class="card stat">
+    <div class="stat-label">Userbot (Create Channel)</div>
+    <div class="stat-val live-ub {% if userbot.logged_in %}ok{% else %}bad{% endif %}">
+      {% if userbot.logged_in %}🟢 Login{% else %}🔴 Belum{% endif %}
+    </div>
+    <div class="stat-sub live-ubsub">{% if userbot.logged_in %}@{{ userbot.me_username or '-' }}{% else %}{{ userbot.message[:40] }}{% endif %}</div>
+  </div>
+  <div class="card stat">
     <div class="stat-label">Uptime Server</div>
     <div class="stat-val live-uptime">—</div>
     <div class="stat-sub">sejak restart terakhir</div>
@@ -135,6 +142,15 @@ async function refreshStatus() {
     if (us) us.textContent = d.counts.users;
     const ch = document.querySelector('.live-chs');
     if (ch) ch.textContent = d.counts.channels;
+    const ub = document.querySelector('.live-ub');
+    const ubs = document.querySelector('.live-ubsub');
+    if (ub && d.userbot) {
+      ub.textContent = d.userbot.logged_in ? '🟢 Login' : '🔴 Belum';
+      ub.className = 'stat-val live-ub ' + (d.userbot.logged_in ? 'ok' : 'bad');
+      if (ubs) ubs.textContent = d.userbot.logged_in
+        ? '@' + (d.userbot.me_username || '-')
+        : (d.userbot.message || '').slice(0, 40);
+    }
   } catch (e) {}
 }
 refreshStatus();

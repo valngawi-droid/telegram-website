@@ -4,8 +4,10 @@
 {% block admin %}
 <div class="card tool-card">
   <h3>➕ Buat Channel atau Grup Baru</h3>
-  <p class="muted">Bot akan membuat channel/grup melalui MTProto, lalu memindahkan
-  ownership ke owner pilihan. Butuh BOT_TOKEN + API_ID + API_HASH terisi (menu Pengaturan).</p>
+  <p class="muted">Channel/grup dibuat oleh <b>userbot</b> (akun user) — Telegram
+  melarang bot membuat channel. Lalu ownership dipindahkan ke owner pilihan
+  (butuh 2FA aktif di akun userbot). Login userbot:
+  <code>cd /opt/pallbot && .venv/bin/python deploy/userbot_login.py</code></p>
 
   <label>Nama Channel / Grup</label>
   <input id="f-name" type="text" placeholder="Contoh: Grup Hype Pall" />

@@ -111,6 +111,8 @@ async def lifespan(app: FastAPI):
     rem_task.cancel()
     await bot_manager.stop()
     await services.stop_mtproto()
+    from .. import userbot
+    await userbot.stop_userbot()
     await db.close()
 
 
@@ -233,11 +235,13 @@ async def page_dashboard(request: Request):
     logs = await db.get_logs(30)
     users = await db.get_users()
     users.sort(key=lambda u: u.get("last_used") or 0, reverse=True)
+    from .. import userbot
+    ub = await userbot.userbot_status(cfg)
     return _page(request, "dashboard.html",
                  status=_public_status(), counts=await _counts(),
                  ai_provider=cfg.get("AI_PROVIDER"),
                  ai_model=cfg.get("AI_MODEL") or cfg.get("AI_OPENAI_MODEL"),
-                 logs=logs, users=users)
+                 logs=logs, users=users, userbot=ub)
 
 
 @app.get("/admin/buat", response_class=HTMLResponse)
@@ -289,6 +293,8 @@ async def page_logout(request: Request):
 @app.get("/api/health")
 async def api_health():
     up = int(time.time() - APP_STARTED_AT)
+    from .. import userbot
+    ub = await userbot.userbot_status(await _cfg())
     return {
         "ok": True,
         "app": "PallBot",
@@ -297,6 +303,11 @@ async def api_health():
             f"{up // 3600}j {(up % 3600) // 60}m" if up >= 3600 else f"{up // 60}m {up % 60}s"
         ),
         "bot": _public_status(),
+        "userbot": {
+            "logged_in": ub["logged_in"],
+            "me_username": ub["me_username"],
+            "message": ub["message"],
+        },
         "counts": await _counts(),
     }
 

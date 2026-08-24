@@ -33,6 +33,9 @@ DEFAULTS = {
     # Izin & limit create channel/grup
     "CREATE_LIMIT": "10",             # default limit per member yang di-whitelist
     "OWNER_CHAT_ID": "8861238621",    # tujuan "Chat dengan Owner" (Pall utama)
+    # Userbot (akun user untuk fitur create channel/grup)
+    "USER_PHONE": "",                 # nomor login userbot, format 62812...
+    "USER_2FA": "",                   # password 2FA akun userbot (untuk transfer owner)
     # Lainnya
     "WEB_PORT": "8000",
 }
@@ -41,10 +44,12 @@ DEFAULTS = {
 SAFE_SETTINGS = [
     "BOT_USERNAME", "AI_PROVIDER", "AI_PROJECT", "AI_MODEL",
     "AI_BASE_URL", "AI_OPENAI_MODEL", "CREATE_LIMIT", "OWNER_CHAT_ID",
+    "USER_PHONE",
 ]
 
 # Key rahasia — nilai-nya tidak pernah dikirim ke browser
-SECRET_SETTINGS = ["BOT_TOKEN", "API_ID", "API_HASH", "ADMIN_PASSWORD", "AI_KEY"]
+SECRET_SETTINGS = ["BOT_TOKEN", "API_ID", "API_HASH", "ADMIN_PASSWORD",
+                   "AI_KEY", "USER_2FA"]
 
 # Pemilik bot (admin) — bisa ditambah via database
 PRESET_OWNERS = [

@@ -135,261 +135,166 @@ async def create_entity(
     about: str = "",
     source: str = "bot",
 ) -> dict:
-    """Buat channel/grup baru, lalu pindahkan ownership ke owner_tg_id.
+    """Buat channel/grup baru, lalu tunjuk owner_tg_id sebagai owner.
+
+    PENTING: Telegram melarang BOT membuat channel/grup, jadi ini memakai
+    USERBOT (akun user, login sekali via deploy/userbot_login.py).
 
     Return dict: {ok, name, tg_id, username, invite, owner_tg_id, message}
     """
-    from telethon.tl.functions.channels import (
-        CreateChannelRequest,
-        EditAdminRequest,
-        InviteToChannelRequest,
-    )
-    from telethon.tl.types import ChatAdminRights
-
-    client = await get_mtproto()
-    if client is None:
-        ok, msg = await start_mtproto(await get_cfg())
-        if not ok:
-            return {"ok": False, "message": msg}
-        client = await get_mtproto()
-
-    me = await client.get_me()
-    full_rights = ChatAdminRights(
-        change_info=True, post_messages=True, edit_messages=True,
-        delete_messages=True, ban_users=True, invite_users=True,
-        pin_messages=True, add_admins=True, manage_call=True,
-        other=True, manage_topics=True,
-    )
-
-    try:
-        result = await client(
-            CreateChannelRequest(
-                title=name, about=about,
-                broadcast=(etype == "channel"),
-                megagroup=(etype == "group"),
-            )
-        )
-        # ambil chat yang baru dibuat dari Updates
-        chat = None
-        for c in (getattr(result, "chats", None) or []):
-            if getattr(c, "title", None) == name:
-                chat = c
-                break
-        if chat is None:
-            for c in (getattr(result, "chats", None) or []):
-                chat = c
-        if chat is None:
-            for d in (getattr(result, "dialogs", None) or []):
-                c = getattr(d, "chat", None) or getattr(d, "peer", None)
-                if c is not None:
-                    chat = c
-                    break
-        if chat is None:
-            return {"ok": False, "message": "Channel/grup dibuat tapi tidak bisa diidentifikasi. Cek manual di Telegram."}
-        tg_id = chat.id
-        username = getattr(chat, "username", "") or ""
-
-        # --- tunjuk owner terpilih sebagai admin penuh (rank "Owner") ---
-        # Catatan: transfer ownership *sejati* (channels.editCreator) hanya bisa
-        # dilakukan akun user + password 2FA, tidak bisa oleh bot. Jadi owner
-        # ditunjuk sebagai admin penuh dengan rank "Owner" — persis seperti
-        # bot reseller channel pada umumnya.
-        owner_note = ""
-        owner_id = int(owner_tg_id)
-        if owner_id != me.id:
-            try:
-                try:
-                    await client(InviteToChannelRequest(chat, [owner_id]))
-                except RPCError:
-                    pass  # sudah member
-                await client(EditAdminRequest(
-                    channel=chat,
-                    user_id=owner_id,
-                    admin_rights=full_rights,
-                    rank="Owner",
-                ))
-                owner_note = (f"{owner_id} ditunjuk sebagai admin penuh "
-                              f"dengan rank 'Owner' (semua hak admin).")
-            except Exception as e2:
-                owner_note = (f"⚠️ Channel/grup sudah dibuat, tapi penunjukan "
-                              f"owner {owner_id} gagal: {e2}. Tambahkan manual.")
-        else:
-            owner_note = f"Owner tetap bot ({me.id})."
-
-        # --- invite link (jika ada) ---
-        invite = f"https://t.me/{username}" if username else ""
-        if not invite:
-            try:
-                from telethon.tl.functions.messages import ExportChatInviteRequest
-                inv = await client(ExportChatInviteRequest(peer=chat))
-                invite = inv.link or ""
-            except Exception:
-                invite = ""
-
-        return {
-            "ok": True,
-            "name": name,
-            "tg_id": tg_id,
-            "username": username,
-            "invite": invite,
-            "owner_tg_id": int(owner_tg_id),
-            "message": owner_note,
-        }
-    except Exception as e:
-        await db.log("error", "mtproto", f"create_entity gagal: {e}")
-        return {"ok": False, "message": f"❌ Gagal membuat {etype}: {e}"}
+    from . import userbot
+    cfg = await get_cfg()
+    return await userbot.create_with_user(cfg, name, etype, owner_tg_id, about)
 
 
 async def join_invite(link: str) -> dict:
-    """Bot join channel/grup lewat invite link (atau username publik)."""
+    """Join channel/grup lewat invite link — coba userbot dulu, lalu bot."""
     from telethon.tl.functions.messages import ImportChatInviteRequest
-
-    client = await get_mtproto()
-    if client is None:
-        ok, msg = await start_mtproto(await get_cfg())
-        if not ok:
-            return {"ok": False, "message": msg}
-        client = await get_mtproto()
+    from . import userbot
 
     link = link.strip()
     if link and not link.startswith("http") and not link.startswith("@"):
         link = f"https://t.me/+{link}" if not link.startswith("/") else link
+
+    # 1) userbot (akun user bisa join lebih banyak tempat)
+    cfg = await get_cfg()
+    uc = await userbot.get_user_client(cfg)
+    if uc is not None:
+        try:
+            chat = await uc(ImportChatInviteRequest(link))
+            name = getattr(chat, "title", str(chat))
+            return {"ok": True, "name": name, "tg_id": chat.id,
+                    "message": f"✅ Userbot bergabung ke {name}"}
+        except Exception as e:
+            msg_u = f"Userbot: {e}"
+    else:
+        msg_u = "userbot belum login"
+
+    # 2) fallback: bot
+    client = await get_mtproto()
+    if client is None:
+        ok, msg = await start_mtproto(cfg)
+        if not ok:
+            return {"ok": False, "message": f"❌ Gagal join ({msg_u}). {msg}"}
+        client = await get_mtproto()
     try:
         chat = await client(ImportChatInviteRequest(link))
         name = getattr(chat, "title", str(chat))
         return {"ok": True, "name": name, "tg_id": chat.id,
                 "message": f"✅ Bot bergabung ke {name}"}
     except Exception as e:
-        return {"ok": False, "message": f"❌ Gagal join: {e}"}
+        return {"ok": False,
+                "message": f"❌ Gagal join — userbot: {msg_u} | bot: {e}"}
 
 
 # --------------------------------------------------------------------------
 # Kelola channel/grup yang sudah dibuat
 # --------------------------------------------------------------------------
+async def _userbot_then_bot(tg_id: int, action: str, **kwargs) -> dict:
+    """Coba aksi via userbot (creator channel) dulu, fallback ke bot."""
+    from . import userbot
+    cfg = await get_cfg()
+    r = await userbot.userbot_manage(cfg, tg_id, action, **kwargs)
+    if r is not None:
+        return r
+    # fallback: bot MTProto
+    client = await get_mtproto()
+    if client is None:
+        ok, msg = await start_mtproto(cfg)
+        if not ok:
+            return {"ok": False,
+                    "message": "❌ Userbot belum login & bot MTProto belum lengkap. "
+                               "Jalankan deploy/userbot_login.py di VPS."}
+        client = await get_mtproto()
+    try:
+        if action == "edit":
+            if kwargs.get("name"):
+                from telethon.tl.functions.channels import EditTitleRequest
+                peer = await client.get_input_entity(int(tg_id))
+                await client(EditTitleRequest(channel=peer, title=kwargs["name"].strip()))
+            if kwargs.get("about") is not None:
+                from telethon.tl.functions.messages import EditChatAboutRequest
+                peer = await client.get_input_entity(int(tg_id))
+                await client(EditChatAboutRequest(peer=peer, about=kwargs["about"].strip()[:500]))
+            return {"ok": True, "message": "✅ Berhasil diperbarui (via bot)"}
+        if action == "detail":
+            from telethon.tl.functions.channels import GetFullChannelRequest
+            peer = await client.get_input_entity(int(tg_id))
+            full = await client(GetFullChannelRequest(channel=peer))
+            fc = full.full_chat
+            return {"ok": True, "title": getattr(fc, "title", ""),
+                    "username": getattr(fc, "username", "") or "",
+                    "about": getattr(fc, "about", "") or "",
+                    "participants_count": getattr(fc, "participants_count", 0),
+                    "admin_count": getattr(fc, "admins_count", 0)}
+        if action == "invite":
+            from telethon.tl.functions.messages import ExportChatInviteRequest
+            peer = await client.get_input_entity(int(tg_id))
+            inv = await client(ExportChatInviteRequest(peer=peer))
+            link = inv.link or ""
+            return {"ok": True, "invite": link,
+                    "message": f"✅ Invite link baru: {link}" if link else "✅ (tanpa link)"}
+        if action == "username":
+            from telethon.tl.functions.channels import UpdateUsernameRequest
+            peer = await client.get_input_entity(int(tg_id))
+            u = kwargs["username"].strip().lstrip("@")
+            await client(UpdateUsernameRequest(channel=peer, username=u))
+            return {"ok": True, "username": u,
+                    "message": f"✅ Username publik di-set: @{u}"}
+        if action == "delete":
+            from telethon.tl.functions.channels import DeleteChannelRequest
+            peer = await client.get_input_entity(int(tg_id))
+            await client(DeleteChannelRequest(channel=peer))
+            return {"ok": True,
+                    "message": "✅ Channel/grup dihapus permanen dari Telegram"}
+    except Exception as e:
+        return {"ok": False,
+                "message": f"❌ Gagal ({action}) — userbot: belum login / bot: {e}"}
+    return {"ok": False, "message": f"❌ Aksi {action} tidak dikenal"}
+
+
 async def edit_entity(tg_id: int, name: str | None = None,
                       about: str | None = None) -> dict:
     """Ubah nama (title) dan/atau deskripsi (about) channel/grup."""
-    from telethon.tl.functions.channels import EditTitleRequest
-    from telethon.tl.functions.messages import EditChatAboutRequest
-
-    client = await get_mtproto()
-    if client is None:
-        ok, msg = await start_mtproto(await get_cfg())
-        if not ok:
-            return {"ok": False, "message": msg}
-        client = await get_mtproto()
-    try:
-        peer = await client.get_input_entity(int(tg_id))
-        if name is not None and name.strip():
-            await client(EditTitleRequest(channel=peer, title=name.strip()))
-        if about is not None:
-            await client(EditChatAboutRequest(peer=peer, about=about.strip()[:500]))
-        return {"ok": True, "message": "✅ Berhasil diperbarui"}
-    except Exception as e:
-        return {"ok": False, "message": f"❌ Gagal edit: {e}"}
+    return await _userbot_then_bot(tg_id, "edit", name=name, about=about)
 
 
 async def channel_detail(tg_id: int) -> dict:
     """Detail channel/grup: jumlah member, username, deskripsi."""
-    from telethon.tl.functions.channels import GetFullChannelRequest
-
-    client = await get_mtproto()
-    if client is None:
-        ok, msg = await start_mtproto(await get_cfg())
-        if not ok:
-            return {"ok": False, "message": msg}
-        client = await get_mtproto()
-    try:
-        peer = await client.get_input_entity(int(tg_id))
-        full = await client(GetFullChannelRequest(channel=peer))
-        fc = full.full_chat
-        return {
-            "ok": True,
-            "title": getattr(fc, "title", ""),
-            "username": getattr(fc, "username", "") or "",
-            "about": getattr(fc, "about", "") or "",
-            "participants_count": getattr(fc, "participants_count", 0),
-            "admin_count": getattr(fc, "admins_count", 0),
-        }
-    except Exception as e:
-        return {"ok": False, "message": f"❌ Gagal ambil detail: {e}"}
+    return await _userbot_then_bot(tg_id, "detail")
 
 
 async def new_invite(tg_id: int) -> dict:
     """Buat invite link baru untuk channel/grup."""
-    from telethon.tl.functions.messages import ExportChatInviteRequest
-
-    client = await get_mtproto()
-    if client is None:
-        ok, msg = await start_mtproto(await get_cfg())
-        if not ok:
-            return {"ok": False, "message": msg}
-        client = await get_mtproto()
-    try:
-        peer = await client.get_input_entity(int(tg_id))
-        inv = await client(ExportChatInviteRequest(peer=peer))
-        link = inv.link or ""
-        return {"ok": True, "invite": link,
-                "message": f"✅ Invite link baru: {link}" if link else "✅ Link: (kosong, pakai username)"}
-    except Exception as e:
-        return {"ok": False, "message": f"❌ Gagal buat invite: {e}"}
+    return await _userbot_then_bot(tg_id, "invite")
 
 
 async def delete_entity(tg_id: int) -> dict:
-    """Hapus channel/grup di Telegram (TIDAK BISA DIURAI KEMBALI!)."""
-    from telethon.tl.functions.channels import DeleteChannelRequest
+    """Hapus channel/grup di Telegram (TIDAK BISA DIURAI KEMBALI!).
 
-    client = await get_mtproto()
-    if client is None:
-        ok, msg = await start_mtproto(await get_cfg())
-        if not ok:
-            return {"ok": False, "message": msg}
-        client = await get_mtproto()
-    try:
-        peer = await client.get_input_entity(int(tg_id))
-        await client(DeleteChannelRequest(channel=peer))
-        return {"ok": True, "message": "✅ Channel/grup dihapus permanen dari Telegram"}
-    except Exception as e:
-        return {"ok": False, "message": f"❌ Gagal hapus: {e}"}
+    Catatan: hanya CREATOR/OWNER channel yang bisa menghapus.
+    """
+    return await _userbot_then_bot(tg_id, "delete")
 
 
 async def set_username(tg_id: int, username: str) -> dict:
     """Set username publik (@...) untuk channel/grup."""
-    from telethon.tl.functions.channels import UpdateUsernameRequest
-
-    client = await get_mtproto()
-    if client is None:
-        ok, msg = await start_mtproto(await get_cfg())
-        if not ok:
-            return {"ok": False, "message": msg}
-        client = await get_mtproto()
     username = username.strip().lstrip("@")
     if not username:
         return {"ok": False, "message": "❌ Username kosong"}
-    try:
-        peer = await client.get_input_entity(int(tg_id))
-        await client(UpdateUsernameRequest(channel=peer, username=username))
-        return {"ok": True, "username": username,
-                "message": f"✅ Username publik di-set: @{username}"}
-    except Exception as e:
-        return {"ok": False, "message": f"❌ Gagal set username: {e}"}
+    return await _userbot_then_bot(tg_id, "username", username=username)
 
 
 async def check_invite(link: str) -> dict:
     """Cek invite link channel/grup sebelum join (preview info)."""
     from telethon.tl.functions.messages import CheckChatInviteRequest
+    from . import userbot
 
-    client = await get_mtproto()
-    if client is None:
-        ok, msg = await start_mtproto(await get_cfg())
-        if not ok:
-            return {"ok": False, "message": msg}
-        client = await get_mtproto()
     link = link.strip()
     if link and not link.startswith("http") and not link.startswith("@"):
         link = f"https://t.me/+{link}" if not link.startswith("/") else link
-    try:
-        chat = await client(CheckChatInviteRequest(link))
+
+    def _parse(chat):
         return {
             "ok": True,
             "title": getattr(chat, "title", "") or getattr(chat, "username", "") or "?",
@@ -397,8 +302,25 @@ async def check_invite(link: str) -> dict:
             "participants_count": getattr(chat, "participants_count", 0),
             "type": getattr(chat, "broadcast", False) and "channel" or "group",
         }
+
+    cfg = await get_cfg()
+    uc = await userbot.get_user_client(cfg)
+    if uc is not None:
+        try:
+            return _parse(await uc(CheckChatInviteRequest(link)))
+        except Exception:
+            pass
+    client = await get_mtproto()
+    if client is None:
+        ok, msg = await start_mtproto(cfg)
+        if not ok:
+            return {"ok": False, "message": msg}
+        client = await get_mtproto()
+    try:
+        return _parse(await client(CheckChatInviteRequest(link)))
     except Exception as e:
-        return {"ok": False, "message": f"❌ Invite link tidak valid / tidak bisa diakses: {e}"}
+        return {"ok": False,
+                "message": f"❌ Invite link tidak valid / tidak bisa diakses: {e}"}
 
 
 # --------------------------------------------------------------------------

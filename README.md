@@ -61,13 +61,20 @@ Bot Telegram (aiogram 3)      Website (FastAPI + Jinja2)
 | `8719750003` | Pall (Akun Kedua) |
 | `8897520559` | Pacar Pall |
 
-> 💡 **Catatan penting soal "owner":** membuat channel/grup + memindahkan
-> ownership **sejati** (`channels.editCreator`) hanya bisa dilakukan oleh
-> **akun user** (perlu login HP + password 2FA) — bot **tidak bisa** melakukannya.
-> Jadi PallBot menggunakan cara standar bot reseller channel: bot membuat
-> channel/grup (bot jadi creator), lalu owner pilihan ditunjuk sebagai
-> **admin penuh dengan rank "Owner"** (semua hak: manage channel, tambah admin,
-> post, dll). Ini sudah penuh kendali di channel tersebut.
+> 💡 **Cara kerja "Buat Channel/Grup" (PENTING):** Telegram **melarang bot**
+> membuat channel/grup (`CreateChannelRequest` ditolak server). Jadi PallBot
+> memakai **userbot** — akun user yang di-login **sekali** di VPS:
+>
+> ```bash
+> cd /opt/pallbot && .venv/bin/python deploy/userbot_login.py
+> ```
+>
+> Alurnya: userbot membuat channel (userbot = creator) → ownership
+> **dipindahkan ke owner pilihan** via `channels.editCreator` (butuh **2FA aktif**
+> di akun userbot + session berumur > 24 jam) → kalau transfer gagal, owner
+> dijadikan **admin penuh rank "Owner"**. Bot juga otomatis jadi admin channel
+> (untuk kelola + broadcast). Session tersimpan di `data/pallbot_user.session`
+> (jangan di-share, jangan di-commit).
 
 ## 🔐 Sistem Izin Create (Role + Limit)
 

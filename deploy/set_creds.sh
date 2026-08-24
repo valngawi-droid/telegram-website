@@ -52,6 +52,12 @@ read -rp "🤖 AI_KEY (key AI, boleh kosong): " AKEY
 read -rp "🔐 ADMIN_PASSWORD baru (kosong = tetap pall123): " APW
 [ -n "$APW" ] && setval ADMIN_PASSWORD "$APW"
 
+read -rp "👤 USER_PHONE — nomor akun userbot, mis. 628861238621 (WAJIB utk create channel): " UPHONE
+[ -n "$UPHONE" ] && setval USER_PHONE "$UPHONE"
+
+read -rp "🔑 USER_2FA — password 2FA akun userbot (kosong = skip): " U2FA
+[ -n "$U2FA" ] && setval USER_2FA "$U2FA"
+
 chmod 600 "$ENV"
 echo
 echo "🔄 Restart service pallbot..."

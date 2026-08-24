@@ -66,7 +66,7 @@ Website langsung live di: `http://IP_VPS:8000`
 
 ---
 
-## STEP 4 — Ambil API ID & API Hash (WAJIB untuk fitur Buat Channel/Grup)
+## STEP 4 — Ambil API ID & API Hash
 
 1. Buka **https://my.telegram.org** → login dengan nomor Telegram-mu
    (nomor bisa nomor manapun dari 3 akun)
@@ -105,6 +105,34 @@ nano /opt/pallbot/.env
 #   ADMIN_PASSWORD=ganti-password-kamu
 sudo systemctl restart pallbot
 ```
+
+---
+
+## STEP 5b — Login Userbot (WAJIB untuk fitur Buat Channel/Grup)
+
+> ⚠️ **Telegram melarang BOT membuat channel/grup.** Fitur create memakai
+> **akun user** (userbot). Login **sekali saja** di VPS:
+
+```bash
+# 1. set nomor userbot di .env (salah satu akunmu):
+nano /opt/pallbot/.env
+#    USER_PHONE=628861238621     (tanpa +, tanpa 0 di depan 8)
+#    USER_2FA=...                (password 2FA akun ini, kalau ada)
+
+# 2. jalankan login:
+cd /opt/pallbot
+.venv/bin/python deploy/userbot_login.py
+#    → masukin kode 5 digit dari Telegram
+#    → (kalau ada) masukin password 2FA
+#    → self-test: buat channel "Uji Userbot" lalu hapus
+```
+
+**Syarat transfer ownership (pilih owner selain akun userbot):**
+- Akun userbot harus punya **2FA aktif** (Settings → Privacy → Two-Step)
+- 2FA baru diubah / session baru login → **tunggu 24 jam** (aturan Telegram)
+- Kalau syarat belum terpenuhi: owner tetap dapat **admin penuh rank "Owner"**
+
+Setelah login, dashboard nampil **Userbot 🟢 Login**.
 
 ---
 

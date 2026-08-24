@@ -65,6 +65,32 @@
   </div>
 </div>
 
+<div class="card tool-card">
+  <h3>👤 Userbot (WAJIB untuk Buat Channel/Grup)</h3>
+  <p class="muted">
+    Telegram <b>melarang bot</b> membuat channel/grup — jadi fitur create memakai
+    <b>akun user</b> (userbot). Login sekali via SSH di VPS, session tersimpan permanen.
+  </p>
+  <div class="row-2">
+    <div>
+      <label>Nomor Userbot (62812...)</label>
+      <input id="s-USER_PHONE" type="text" value="{{ values.USER_PHONE or '' }}" placeholder="628861238621" />
+    </div>
+    <div>
+      <label>Password 2FA akun userbot</label>
+      <input id="s-USER_2FA" type="password" placeholder="kosong = tidak diubah" />
+    </div>
+  </div>
+  <div class="result-box">
+    <b>Cara login userbot (sekali saja, di VPS):</b><br/>
+    <code>cd /opt/pallbot &amp;&amp; .venv/bin/python deploy/userbot_login.py</code><br/>
+    <span class="muted">
+    ⚠️ Telegram mewajibkan <b>2FA aktif</b> + umur akun/sesi <b>&gt; 24 jam</b> untuk
+    transfer ownership (pilih owner selain akun userbot). Create channel langsung bisa.
+    </span>
+  </div>
+</div>
+
 <div class="btn-row">
   <button class="btn btn-primary btn-lg" onclick="saveSettings()">💾 Simpan Pengaturan</button>
   <button class="btn btn-outline btn-lg" onclick="testAi()">🧪 Tes Koneksi AI</button>
@@ -85,7 +111,7 @@
 <script>
 const FIELDS = ['BOT_TOKEN','API_ID','API_HASH','BOT_USERNAME','ADMIN_PASSWORD',
   'AI_PROVIDER','AI_PROJECT','AI_MODEL','AI_OPENAI_MODEL','AI_BASE_URL','AI_KEY',
-  'CREATE_LIMIT','OWNER_CHAT_ID'];
+  'CREATE_LIMIT','OWNER_CHAT_ID','USER_PHONE','USER_2FA'];
 
 async function saveSettings() {
   const box = document.getElementById('set-result');
