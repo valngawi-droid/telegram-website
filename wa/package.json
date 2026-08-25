@@ -1,0 +1,17 @@
+{
+  "name": "pallbot-wa",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PallBot — bot WhatsApp (mirror fitur bot Telegram)",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "login": "node index.js --login"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "dotenv": "^16.4.5",
+    "qrcode": "^1.5.4",
+    "whatsapp-web.js": "^1.26.0"
+  }
+}
